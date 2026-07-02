@@ -27,14 +27,16 @@ centro-de-mando/
 ├── channel_overrides.json          ← resoluciones manuales de duplicados entre canales (ver §5b)
 ├── build.py                        ← pacientes.dat/json -> HTML final (requiere Python)
 ├── build.js                        ← lo mismo que build.py, en Node (usar si no hay Python)
+├── build_pages.js                  ← genera docs/index.html (dashboard SIN datos, para GitHub Pages — ver §14)
+├── docs/index.html                 ← publicado en GitHub Pages, SIEMPRE sin datos (sí se sube a GitHub)
 ├── package.json                    ← dependencia `xlsx` (SheetJS) + scripts npm
-├── .last_source                    ← recuerda qué Excel se usó la última vez (autogenerado)
+├── .last_source                    ← recuerda qué Excel se usó la última vez (autogenerado, no se sube)
 ├── dashboard_template.html         ← FUENTE que se edita (tiene los placeholders __DATA__ y __ADSPEND__)
-├── pacientes.dat                   ← datos vigentes, generados desde el Excel (autogenerado, no editar a mano)
-├── adspend.dat                     ← presupuesto/leads reales por canal (autogenerado, ver §5c)
-├── pacientes.json                  ← snapshot histórico (612 registros = 204 × 3 canales espejo); build usa .dat si existe
-├── Centro_de_Mando_Comercial.html  ← SALIDA generada (datos ya integrados, es lo que se abre)
-└── COMERCIAL_JULIO.xlsx            ← Excel original de origen (base de pacientes)
+├── pacientes.dat                   ← datos vigentes, generados desde el Excel (autogenerado, NO se sube a GitHub)
+├── adspend.dat                     ← presupuesto/leads reales por canal (autogenerado, NO se sube a GitHub, ver §5c)
+├── pacientes.json                  ← snapshot histórico (612 registros = 204 × 3 canales espejo); NO se sube a GitHub
+├── Centro_de_Mando_Comercial.html  ← SALIDA generada con datos reales (es lo que se abre localmente, NO se sube a GitHub)
+└── COMERCIAL_JULIO.xlsx            ← Excel original de origen (base de pacientes, NO se sube a GitHub)
 ```
 
 **Regla de oro:** se edita `dashboard_template.html`. Los archivos `pacientes.dat` y
@@ -193,9 +195,16 @@ leads totales entraron. Ahora el Excel trae hojas de pauta con esos números:
   PROMOCIONES:{ total:{leads,gastado} }, GOOGLE:{...}, ORGANICO:{...} }
 ```
 `build.py`/`build.js` lo inyectan en el placeholder `const RAW_ADSPEND = __ADSPEND__;` de la
-plantilla (junto al de `RAW_RECORDS`). **Ojo:** a diferencia de `pacientes.dat`, esto **no** se
-actualiza con el botón "Subir Excel" del navegador (solo lo genera `excel_to_dat.js`) — si hace
-falta ese soporte, avisar antes de asumir que ya existe.
+plantilla (junto al de `RAW_RECORDS`).
+
+**Actualizado 2026-07-02:** el botón "Subir Excel" del navegador **también** parsea presupuesto
+ahora — `extractAdSpendBrowser(wb)` (dashboard_template.html) es una copia funcional de
+`extractAdSpend` para que el dashboard publicado en GitHub Pages (sin datos horneados, ver §14)
+quede completo con solo subir el Excel, sin depender de correr `excel_to_dat.js`. `ADSPEND` pasó de
+`const` a `let` para poder reasignarse ahí. **Mantener ambas copias en sync** al tocar la lógica de
+presupuesto (mismo patrón que `parseWorkbook`, ver §5). Lo que el navegador **no** replica todavía:
+las reglas fijas (Mixquiahuala→Facebook, Orgánico gana sobre Facebook) ni el reporte de duplicados
+entre canales — esas solo corren en `excel_to_dat.js`.
 
 En el dashboard, `adspendView(canal, sedeSet)` (dashboard_template.html) sirve leads/gasto reales
 respetando el filtro de canal/sede — para FACEBOOK puede sumar por sucursal seleccionada; para los
@@ -376,6 +385,28 @@ Se usa en: focos rojos, punto/pastilla de semáforo en la tabla de sucursales y 
    `base = recsForCanal(state.canal)` y `recs = selSedes(base)`).
 4. Todo reacciona al filtro global porque `render()` corre en cada cambio de canal/sede y cada
    `renderX` filtra con `selSedes(...)`.
+
+## 14. GitHub — repo privado + dashboard público vacío (GitHub Pages)
+
+Repo: `https://github.com/irvinfrancis1004/centro-de-mando-comercial` (**privado**).
+
+**Regla de oro que no se debe romper:** los datos reales de pacientes/presupuesto **nunca** se
+suben a GitHub, ni al repo ni al link público — así lo pidió Irvin (2026-07-02), después de que el
+primer intento subió `pacientes.dat`/`pacientes.json`/`adspend.dat`/`COMERCIAL_JULIO.xlsx`/
+`Centro_de_Mando_Comercial.html` por error (se corrigió reescribiendo el historial de git desde
+cero, no con un commit que solo los borrara — un commit nuevo los habría dejado igual visibles en
+el historial). El `.gitignore` excluye esos 5 archivos a propósito; **no quitarlos de ahí**.
+
+**`docs/index.html`** es el dashboard publicado — igual a `Centro_de_Mando_Comercial.html` pero
+generado con `node build_pages.js` (`RAW_RECORDS=[]`, `RAW_ADSPEND={}`, siempre vacío). GitHub
+Pages sirve ese archivo en **`https://irvinfrancis1004.github.io/centro-de-mando-comercial/`**
+(configurado: Settings → Pages → branch `master` /docs). Es un link **público** (así funciona
+GitHub Pages, aunque el repo sea privado) — por eso solo se publica la plantilla vacía, nunca el
+HTML con datos horneados. Cada persona que abre el link usa **Subir Excel** para cargar su propio
+archivo; el Excel se procesa en su navegador y no sube a ningún servidor.
+
+**Al tocar `dashboard_template.html`:** correr `node build_pages.js` de nuevo y comitear
+`docs/index.html` actualizado — si no, el link público queda con el código viejo.
 
 ---
 

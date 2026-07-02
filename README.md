@@ -9,6 +9,10 @@ semáforo, focos rojos y presupuesto/CAC por canal.
 Doble clic en **`Centro_de_Mando_Comercial.html`**. No necesita servidor.
 (La pestaña *Mapa 3D* y el botón *Subir Excel* sí necesitan internet.)
 
+**O usa el link público (sin instalar nada):** https://irvinfrancis1004.github.io/centro-de-mando-comercial/
+Abre sin datos — usa el botón **Subir Excel** para cargar tu archivo del mes. Todo se procesa en
+tu navegador, nunca sube a ningún servidor.
+
 ## Actualizar los datos del mes
 
 **Opción A — dentro del navegador (sin tocar nada más):** botón **Subir Excel** → elige tu
