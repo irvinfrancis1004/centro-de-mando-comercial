@@ -1,0 +1,12 @@
+node_modules/
+.last_source
+
+# Datos reales de pacientes (nombres, teléfonos, padecimientos) y presupuesto — nunca a GitHub.
+# El dashboard (plantilla, scripts) sí se comparte; los datos se generan localmente con
+# `npm run update` a partir de tu Excel (ver AGENTS.md / README.md).
+pacientes.dat
+pacientes.json
+adspend.dat
+channel_overrides.json
+COMERCIAL_JULIO.xlsx
+Centro_de_Mando_Comercial.html

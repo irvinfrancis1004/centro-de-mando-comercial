@@ -1,0 +1,382 @@
+# AGENTS.md — Centro de Mando Comercial · Equilibrio Total
+
+Contexto para agentes de IA (Antigravity / Cursor / Windsurf) y para el equipo.
+Léelo completo antes de tocar código.
+
+---
+
+## 1. Qué es esto
+
+Un **dashboard comercial de una sola página HTML, auto-contenido**, para la red de clínicas
+de rehabilitación **Equilibrio Total** (22 sedes en 3 divisiones). Diagnostica el embudo
+comercial **Leads → Agendados → Efectivos → Planes** por canal, división y sucursal, e incluye
+mapa 3D, semáforo de salud, focos rojos y presupuesto/CAC por canal.
+
+- **Funciona sin conexión** (offline-first). La única parte que necesita internet es la pestaña **Mapa 3D**
+  (carga MapLibre + deck.gl + mapa base desde CDN) y el botón **Subir Excel** (carga SheetJS desde CDN).
+- **Sin framework**: HTML + CSS + JavaScript vanilla, todo en un archivo.
+- **No usa localStorage** ni backend. Todo el estado vive en memoria durante la sesión.
+
+## 2. Estructura del proyecto
+
+```
+centro-de-mando/
+├── AGENTS.md                       ← este archivo
+├── README.md                       ← guía corta para humanos
+├── excel_to_dat.js                 ← Excel -> pacientes.dat (Node, replica parseWorkbook + higiene de canales)
+├── channel_overrides.json          ← resoluciones manuales de duplicados entre canales (ver §5b)
+├── build.py                        ← pacientes.dat/json -> HTML final (requiere Python)
+├── build.js                        ← lo mismo que build.py, en Node (usar si no hay Python)
+├── package.json                    ← dependencia `xlsx` (SheetJS) + scripts npm
+├── .last_source                    ← recuerda qué Excel se usó la última vez (autogenerado)
+├── dashboard_template.html         ← FUENTE que se edita (tiene los placeholders __DATA__ y __ADSPEND__)
+├── pacientes.dat                   ← datos vigentes, generados desde el Excel (autogenerado, no editar a mano)
+├── adspend.dat                     ← presupuesto/leads reales por canal (autogenerado, ver §5c)
+├── pacientes.json                  ← snapshot histórico (612 registros = 204 × 3 canales espejo); build usa .dat si existe
+├── Centro_de_Mando_Comercial.html  ← SALIDA generada (datos ya integrados, es lo que se abre)
+└── COMERCIAL_JULIO.xlsx            ← Excel original de origen (base de pacientes)
+```
+
+**Regla de oro:** se edita `dashboard_template.html`. Los archivos `pacientes.dat` y
+`Centro_de_Mando_Comercial.html` son generados — no los edites a mano, se sobrescriben al construir.
+
+## 3. Cómo actualizar los datos y construir
+
+Pipeline de 2 pasos, pensado para que cada mes solo haga falta reemplazar el Excel:
+
+```bash
+node excel_to_dat.js                        # usa ./COMERCIAL_JULIO.xlsx (o el último Excel usado)
+node excel_to_dat.js "ruta\al\excel.xlsx"   # o apunta a un Excel específico (lo recuerda para la próxima)
+node build.js                                # pacientes.dat -> Centro_de_Mando_Comercial.html (no requiere Python)
+```
+
+O en un solo paso: `npm run update` (corre ambos). También existen `npm run dat` y `npm run build`.
+
+Si tu máquina sí tiene Python, `python3 build.py` funciona igual que `build.js` (mismo resultado,
+ambos leen `pacientes.dat` primero y caen a `pacientes.json` si no existe). `excel_to_dat.js`
+requiere Node + el paquete `xlsx` (ya declarado en `package.json`; `npm install` si falta `node_modules`).
+
+Luego abre `Centro_de_Mando_Comercial.html` con doble clic (no necesita servidor).
+
+El flujo completo es: `excel_to_dat.js` parsea el Excel exactamente igual que `parseWorkbook()`
+(la función que corre en el navegador al usar "Subir Excel" — mismo código, portado a Node) y
+escribe `pacientes.dat` (JSON). `dashboard_template.html` contiene la línea
+`const RAW_RECORDS = __DATA__;`; `build.py`/`build.js` reemplazan `__DATA__` por ese JSON. Así el
+dashboard queda auto-contenido otra vez.
+
+> Para editar el estilo/lógica: trabaja en la plantilla, corre `node build.js` (o `python3 build.py`),
+> refresca el navegador. Para probar rápido sin build: también puedes abrir el
+> `Centro_de_Mando_Comercial.html` ya generado y editar ahí directo (es el mismo código, solo que
+> con los datos pegados).
+>
+> **Para actualizar los datos del mes sin usar "Subir Excel" en el navegador:** reemplaza/edita
+> `COMERCIAL_JULIO.xlsx` (o pasa la ruta de tu Excel a `excel_to_dat.js`) y corre `npm run update`.
+
+## 4. Modelo de datos
+
+Cada registro (fila del Excel, ya limpio) es un objeto:
+
+```
+canal            'FACEBOOK' | 'PROMOCIONES' | 'GOOGLE'
+dia              fecha ISO (día del registro)
+nombre           string
+numero           string (teléfono)
+fecha            fecha ISO de la CITA (fecha de agenda). Su presencia define "agendado".
+sede             string en MAYÚSCULAS (normalizada)
+asiste           'SI' | 'NO' | 'PENDIENTE' | 'SIN DATO'
+costo_pago       number (si el costo venía como número = pagado)
+costo_pendiente  bool (si el costo venía como texto = pago pendiente)
+plan             'SI' | 'NO' | 'SIN DATO'
+monto            number (valor del plan aperturado)
+cxc              number (cuenta por cobrar)
+padecimiento     string libre (texto del CRM)
+padGrp           string — se agrega en runtime (annotatePad) con el clasificador
+```
+
+**Definiciones del embudo (CLAVE — no cambiar sin avisar):**
+
+| Etapa      | Definición en código                         |
+|------------|----------------------------------------------|
+| Lead       | cada fila (`recs.length`)                    |
+| Agendado   | fila con `fecha` (helper `hasCita`)          |
+| Efectivo   | `asiste === 'SI'`                            |
+| Plan       | `plan === 'SI'`                              |
+
+Tasas: **agendamiento** = agendados/leads · **asistencia** = efectivos/agendados · **cierre** = planes/efectivos.
+
+> Nota importante: en `COMERCIAL_JULIO.xlsx` **todas las filas tienen fecha de cita**, o sea la base
+> son puros agendados → la tasa de agendamiento sale **100%**. Cuando el Excel del mes incluya también
+> los leads que NO agendaron (filas sin fecha de cita) o una columna de leads, la tasa real (~15%)
+> aparecerá sola. La estructura ya está lista para eso.
+
+## 5. El Excel que alimenta (`parseWorkbook`)
+
+`parseWorkbook(wb)` soporta 2 formatos de archivo:
+
+**Formato nuevo (desde 2026-07):** una sola hoja llamada exactamente `BASE DE PACIENTES` con los
+pacientes de los 4 canales juntos. El canal de cada fila se **detecta por texto** en el comentario
+(columna `PADECIMIENTO`), con `detectCanalFromPad(pad)`:
+
+- si el comentario menciona `GOOGLE` → canal GOOGLE
+- si menciona `PROMOCION` (cualquier variante de "promociones") → canal PROMOCIONES
+- si menciona `ORGANIC` (cualquier variante de "orgánico") → canal ORGANICO
+- **si no menciona ninguno → canal FACEBOOK** (Meta). Regla explícita de Irvin (2026-07-01):
+  "si no dice nada las citas pertenecen a Facebook".
+
+Es una búsqueda de palabra simple, a propósito (así lo pidió Irvin — sin exigir una estructura fija
+en el comentario). Ojo: esto puede dar falsos positivos si el costo/paquete del tratamiento incluye
+la palabra "PROMOCIONES" en su nombre (p. ej. `"590+POSTUR+PROMOCIONES"`) sin ser realmente un lead
+de ese canal — es un trade-off aceptado a propósito por simplicidad, no un bug.
+
+**Formato viejo:** una hoja por canal, nombre tipo `BASE DE PACIENTES ... FACEBOOK` /
+`... PROMOCIONES` / `... GOOGLE` / `... ORGANICO` (regex, sin importar mayúsculas). Se usa como
+fallback si no existe la hoja unificada `BASE DE PACIENTES`.
+
+En ambos formatos, dentro de la hoja se localiza el renglón de encabezados (el que contiene
+`NOMBRE`) y se mapean columnas por texto: `DIA`, `NOMBRE`, `APELLIDO` (opcional — si existe se
+concatena con NOMBRE), `NUMERO`, `FECHA DE AGENDA`, `SEDE`, `ASISTE`, `COSTO`, `PLAN`, `MONTO`,
+`CXC` (o `CUENTA`), `PADECIMIENTO`.
+
+> Las hojas `FACEBOOK`/`PROMOCIONES`/`GOOGLE`/`ORGANICO` en el archivo actual **ya no son bases de
+> pacientes** — son hojas de rendimiento/presupuesto de pauta (leads totales, presupuesto gastado;
+> Facebook además viene desglosada por sucursal con CAC, CPL, % agendadas/efectivas/asistencia).
+> El dashboard todavía no las consume — quedan pendientes de decidir si se integran (ver §12).
+
+En el formato viejo, si las hojas de canal llegan a ser copias espejo exactas, `detectMirrors()` las
+detecta y el Consolidado deduplica para no contar triple. Con el formato nuevo esto no aplica (ya es
+una sola hoja), por eso la higiene de duplicados pasa a `excel_to_dat.js` (ver §5b).
+
+## 5b. Higiene entre canales (`excel_to_dat.js` → `applyChannelRules`)
+
+Como el canal ahora se decide por texto (o, en el formato viejo, por en qué hoja cae la fila), un
+mismo paciente puede terminar contado en dos canales por error de captura (p. ej. una fila sin
+mención de canal → Facebook, y otra fila del mismo paciente con "GOOGLE" en el comentario). Eso se
+cuenta doble en el Consolidado si no se corrige. `excel_to_dat.js` corrige esto **antes** de escribir
+`pacientes.dat`, en este orden:
+
+1. **Regla fija:** cualquier registro `GOOGLE` con `sede === 'MIXQUIAHUALA'` se reclasifica solo a
+   `FACEBOOK` (Irvin, 2026-07-01: así se maneja siempre esa sede en Google).
+2. **Regla fija:** si un paciente está en `ORGANICO` y también en `FACEBOOK` (mismo número+nombre+
+   sucursal), se elimina solo de FACEBOOK (ORGANICO manda) — sin preguntar.
+3. **Detección de duplicados entre canales restantes:** agrupa registros por `nombre` + `numero` +
+   `sede` normalizados (número solo dígitos, nombre en mayúsculas). Si la misma combinación aparece
+   en más de un canal:
+   - si ya existe una resolución en **`channel_overrides.json`** (array de
+     `{numero, nombre, sede, canal, nota}`), se aplica sola: se queda solo el registro del canal
+     correcto y se descarta el resto — no se cuenta doble.
+   - si no hay resolución todavía, **no se borra nada**: se dejan ambos registros tal cual y se
+     imprime un reporte en consola (`ATENCION · N paciente(s)...`) con nombre, número, sede y en qué
+     canales aparece, para resolverlo a mano.
+4. Casos con nombre+sede iguales pero **sin número** para confirmar el match se dejan tal cual y se
+   avisan aparte (`AVISO ·`), no se tratan como duplicado automático (no hay forma de confirmarlo).
+
+**Flujo para resolver un duplicado reportado:** cuando `node excel_to_dat.js` marca un paciente,
+Irvin indica a qué canal pertenece de verdad → se agrega una entrada a `channel_overrides.json` →
+se vuelve a correr `npm run update`. La resolución queda guardada, así que si ese mismo paciente
+reaparece en un mes futuro ya no se vuelve a preguntar.
+
+## 5c. Presupuesto, leads reales, CAC y proyección (`adspend.dat` + pestaña "Presupuesto")
+
+Añadido 2026-07-01. Antes el dashboard no podía calcular CAC ni un agendamiento real porque
+`pacientes.json`/`.dat` solo trae gente que **ya agendó** (ver §4) — no había forma de saber cuántos
+leads totales entraron. Ahora el Excel trae hojas de pauta con esos números:
+
+- **Hoja `FACEBOOK`**: viene en bloques repetidos (encabezado `SUCURSAL/META DE PACIENTES/META
+  LEADS/PP GASTADO/LEADS/CPL/FRECUENCIA` + filas de sucursal + fila `TOTAL`), uno por grupo. Trae
+  desglose real por sucursal.
+- **Hojas `PROMOCIONES`/`GOOGLE`/`ORGANICO`**: solo `LEADS`/`PRESUPUESTO` en agregado (sin
+  desglose por sucursal), y hoy sin datos capturados (0).
+
+`extractAdSpend(wb)` en `excel_to_dat.js` las parsea a `adspend.dat`:
+```
+{ FACEBOOK:{ bySede:{ BALBUENA:{metaPacientes,metaLeads,gastado,leads,cpl}, ... }, total:{...} },
+  PROMOCIONES:{ total:{leads,gastado} }, GOOGLE:{...}, ORGANICO:{...} }
+```
+`build.py`/`build.js` lo inyectan en el placeholder `const RAW_ADSPEND = __ADSPEND__;` de la
+plantilla (junto al de `RAW_RECORDS`). **Ojo:** a diferencia de `pacientes.dat`, esto **no** se
+actualiza con el botón "Subir Excel" del navegador (solo lo genera `excel_to_dat.js`) — si hace
+falta ese soporte, avisar antes de asumir que ya existe.
+
+En el dashboard, `adspendView(canal, sedeSet)` (dashboard_template.html) sirve leads/gasto reales
+respetando el filtro de canal/sede — para FACEBOOK puede sumar por sucursal seleccionada; para los
+otros 3 canales siempre es el agregado del canal completo (no hay desglose que filtrar). Con eso:
+
+- **Agendamiento real** = agendados / leads reales (ya no agendados/filas de la base, que siempre
+  daba 100%).
+- **CAC** = gasto en pauta / citas efectivas (asistieron). Fórmula confirmada con Irvin (2026-07-01).
+- **Efectividad sobre leads** = efectivos / leads reales.
+
+> **Importante (2026-07-01, corregido tras feedback de Irvin):** los leads reales NO viven solo en
+> la pestaña Presupuesto — `kpis(recs, realLeads)` ahora acepta un segundo parámetro opcional que
+> reemplaza `recs.length` como denominador de leads, y `render()` le pasa
+> `adspendView(state.canal, state.sedes).leads`. Esto corrige el KPI "Leads (contactos)" y el %
+> de agendamiento en **Resumen** (embudo, tarjetas KPI) — antes solo se veía en Presupuesto y el
+> resto del dashboard seguía mostrando el conteo de filas (el bug que Irvin reportó como "sigo
+> viendo los leads equivocados"). `sedeAgg(base)` recibió el mismo tratamiento vía
+> `sedeRealLeads(sede, canalRows)`: para sedes que son 100% Facebook usa `adspend.FACEBOOK.bySede`;
+> si la vista mezcla canales (Consolidado), suma Facebook real + conteo de filas para los canales
+> sin desglose por sede; si la sede no tiene ningún registro de Facebook, cae de vuelta al conteo
+> de filas. Esto alimenta la tabla de Sucursales (columnas Leads/% Agend).
+
+**Proyección de cierre de mes** (`monthProjection(recs)`): usa la fecha real del navegador (hoy) como
+corte — Irvin confirmó (2026-07-01) que llena la columna `FECHA DE AGENDA` **día a día, al finalizar
+el día** (hoy carga las citas de hoy, mañana las del día 2, etc.), así que el día de hoy ya cuenta
+completo, no hay que restar un día. Cuenta agendados/efectivos/planes del mes en curso hasta hoy,
+saca el ritmo diario (`total/díasTranscurridos`) y proyecta a fin de mes (`ritmo × díasDelMes`,
+usando `daysInMonth()` real del mes — 31 para julio, no hardcodeado). Se muestra en la pestaña
+**Presupuesto**, debajo de las tarjetas de leads/CAC.
+
+> Los leads/gasto de Facebook por sucursal usan los mismos códigos cortos que `TIERS`/`SEDE_COORDS`
+> (normalizados con `normSede`, ver §6) — si el nombre de una sucursal nueva no tiene un prefijo ya
+> contemplado (`CLINICA`, `EQUILIBRIO TOTAL`, `FSH`), no va a calzar y quedará fuera del desglose.
+
+> **`asISO` también convierte fechas de texto** (`"01/07/2026"` en vez de una fecha real de Excel) —
+> a veces la celda de `FECHA DE AGENDA`/`DIA` llega como texto plano en formato `DD/MM/AAAA` en lugar
+> de una fecha de Excel; sin esto, `monthProjection`/`inMonth` fallaban silenciosamente (Invalid
+> Date) para esas filas y las excluían de la proyección sin avisar.
+
+> **`normSede` también limpia texto de directorio pegado por error**: alguna vez una celda de `SEDE`
+> trae algo como `"Equilibrio total | Nicolás Romero | Fisioterapia & Rehabilitación"` (texto de un
+> anuncio, no solo el nombre). `normSede` detecta el `|` y toma el primer segmento no vacío como
+> nombre de sede (después de quitar los prefijos conocidos).
+
+## 6. Divisiones (tiers) — array `TIERS`
+
+- **CORPORATIVO** (#19C2A8): BALBUENA, CHALCO, ECATEPEC, NEZA, PLAZA NEZA, MILPA ALTA, MIXQUIAHUALA, TLAHUAC, COACALCO
+- **FRANQUICIAS** (#5B8DEF): AJUSCO, CLAVERIA, LA MODERNA, VALLE DORADO, PACHUCA, NICOLAS ROMERO, CUAUTITLAN
+- **TERCERIZADAS** (#F178B6): CUAUTLA, QUERETARO, SAN JUAN DEL RIO, TEPEYAC, XOCHIMILCO, MIXQUIAHUALA
+- **SATELITE** no está en ningún tier → cae en "Otras / sin grupo".
+- MIXQUIAHUALA está definida pero sin datos en el archivo actual (aparecerá cuando haya registros).
+
+`tierOf(sede)` devuelve el tier de una sede. `SEDE_COORDS` tiene coordenadas aproximadas (nivel
+colonia/municipio) de las 21 sedes con datos, para el mapa 3D.
+
+> **Bug corregido 2026-07-01:** el Excel nuevo trae el nombre completo de la sucursal (`"Clínica
+> Equilibrio Total Balbuena"`, `"Clínica FSH Mixquiahuala"`, `"Equilibrio total Nicolás Romero"`)
+> en vez del código corto. `normSede()` ahora quita los prefijos conocidos (`CLINICA`,
+> `EQUILIBRIO TOTAL`, `FSH`, en cualquier combinación) y renombra casos especiales
+> (`NEZAHUALCOYOTL`→`NEZA`, `PLAZA NEZAHUALCOYOTL`→`PLAZA NEZA`, `MODERNA`→`LA MODERNA`) antes de
+> aplicar `SEDE_FIX`. Sin esto, ninguna sede calzaba con `TIERS`/`SEDE_COORDS` y la tabla de
+> sucursales/mapa 3D se veían vacíos o todo caía en "sin grupo". Si aparece una sucursal nueva con
+> un prefijo distinto, hay que agregarlo a la lista de prefijos en `normSede` (está en
+> `excel_to_dat.js` y en `dashboard_template.html`, deben coincidir).
+
+## 7. Mapa de funciones (dónde está cada cosa)
+
+Todo el JS está en el único `<script>` del final. Funciones clave:
+
+**Datos y utilidades**
+- `normSede`, `titleCase`, `stripAcc`, `hexA`, `asISO`, `fmtDate`, `animNum`, `pct`, `asMoney`, `nf`
+- `recsForCanal(canal)` → registros del canal (Consolidado dedup­lica espejos)
+- `detectMirrors()` → detecta canales espejo
+- `selSedes(recs)` → aplica el filtro global de sedes (multi-select)
+- `hasCita(r)`, `agendCount(recs)`
+
+**KPIs y agregados**
+- `kpis(recs, realLeads?)` → objeto con leads, agendados, efectivos, planes, tasas, ingresos, ticket,
+  cxc, etc. `realLeads` (de `adspendView`) reemplaza `recs.length` como leads cuando hay dato real.
+- `sedeAgg(base)` → agrega por sede (+ divKey, salud-inputs, ticket); usa `sedeRealLeads` para el
+  campo `leads` real por sucursal cuando hay Facebook (ver §5c)
+- `divAgg(rows)` → subtotales por división
+- `salud(s)` → semáforo (score 0-100 + status + métrica más débil). Metas en `TARGETS`.
+
+**Render (una función por bloque visual)**
+- `render()` → orquesta TODO. Se llama en cada cambio de filtro. Lee `selSedes(recsForCanal(canal))`.
+- `renderFunnel(k)`, `renderKpis(k)`, `renderDonut(k)`
+- `renderSede(base)` + `renderSedeBars` + `sedeRowHtml` + `divRowHtml` (tabla agrupada por división con semáforo y TOTAL GENERAL)
+- `renderPad(base)` + `padAgg` + `padGroupKey` (clasificador de padecimientos, 17 grupos + OTRO)
+- `renderPatients(base)` (tabla de pacientes, chips, búsqueda, color por división)
+- `renderFocos(base)` (focos rojos: sedes ≥4 agendados, no verde, top 5 por urgencia)
+- `renderPresupuesto(recs,k)` + `adspendView(canal,sedeSet)` + `monthProjection(recs)` (leads
+  reales/CAC/CPL + proyección de cierre de mes, ver §5c)
+
+**Controles**
+- `buildSedeControl` / `syncSedeUI` / `setSedeFilter` (multi-select de sedes + botones de tier)
+- `setTab(t)` + handler de `#tabbar` (navegación por pestañas)
+- `state` = objeto global de estado: `{canal, sedes:Set, search, chip, padFilter, sedeSort, patSort, padSort}`
+
+**Mapa 3D** (deck.gl + MapLibre)
+- `ensureMap()` (init perezoso al abrir la pestaña, con fallback si no hay internet)
+- `buildMapData()`, `sedeLayer()` (ColumnLayer), `updateMap()` (refresca al cambiar filtro), `mapTooltip()`
+
+**Efectos**
+- Tilt 3D de tarjetas KPI: IIFE con listener `mousemove` sobre `#kgrid`.
+
+## 8. Semáforo de salud (`salud` + `TARGETS`)
+
+```
+TARGETS = { sched: .30, asis: .65, cierre: .30 }   // metas
+score = 100 * ( 0.35*min(agendamiento/.30,1)
+              + 0.30*min(asistencia/.65,1)
+              + 0.35*min(cierre/.30,1) )
+status = score>=80 ? 'verde' : score>=55 ? 'amarillo' : 'rojo'
+```
+
+Se usa en: focos rojos, punto/pastilla de semáforo en la tabla de sucursales y colores del mapa 3D.
+
+## 9. Pestañas (6) — cada una es un `<section class="tabpanel" data-panel="X">`
+
+1. **resumen** — focos rojos + embudo + KPIs (con tilt 3D) + gráficas (barras + dona)
+2. **mapa** — mapa 3D de sedes (columnas extruidas: altura=agendados, color=semáforo)
+3. **presupuesto** — leads reales/gasto/CPL/CAC (via `adspend.dat`, ver §5c) + proyección de cierre de mes
+4. **sucursales** — tabla agrupada por división, subtotales, TOTAL GENERAL, semáforo
+5. **padecimientos** — clasificador + tarjetas + barras + tabla; clic filtra la base y salta a Pacientes
+6. **pacientes** — base completa, chips (plan/no asistió/pendiente/cxc), búsqueda, color por división
+
+> El simulador de impacto se removió (petición de Irvin, 2026-07-01). Si se vuelve a pedir, revisar
+> el historial de `dashboard_template.html` para recuperar `SIM`, `simBaseline`, `projFunnel`,
+> `renderSimOut`, `simResetToBase`, `ensureSim` y el CSS `.simwrap`/`.simpanel`/etc.
+
+## 10. Convenciones / estilo (RESPETAR)
+
+- **Voz del producto**: español mexicano energético, minúsculas, formato mínimo. (Preferencia del usuario, Irvin.)
+- Un solo archivo auto-contenido; sin framework; JS vanilla.
+- Offline-first; solo el mapa necesita internet (con fallback claro).
+- **Sin localStorage** (se removió intencionalmente).
+- Design tokens en `:root` del `<style>`. Tipografías: Space Grotesk (display), Plus Jakarta Sans (body), Space Mono (mono).
+- Al agregar HTML, mantener balance de `<div>`/`<section>`. Al editar JS, validar con `node --check` sobre el `<script>` extraído.
+
+## 11. Limitaciones conocidas
+
+- Base de pacientes = solo agendados (ver §4); el agendamiento real ya no sale 100% gracias a los
+  leads reales de `adspend.dat` (ver §5c) — pero si un canal/sede no tiene leads reales cargados
+  (Google/Orgánico hoy), su % de agendamiento vuelve a caer al 100% falso (fallback a filas).
+- Coordenadas del mapa aproximadas (colonia/municipio). Si se quiere exactitud, editar `SEDE_COORDS`.
+- **CAC ya se calcula** (implementado 2026-07-01, ver §5c y pestaña Presupuesto): usa `adspend.dat`
+  (gasto real por canal, Facebook con desglose por sucursal) + citas efectivas de la base de
+  pacientes. Las hojas `PROMOCIONES`/`GOOGLE`/`ORGANICO` hoy no traen datos capturados (0), así que
+  su CAC/leads reales saldrán en 0/— hasta que se llenen.
+- **Proyección de cierre de mes**: asume que el ritmo de captura ha sido parejo en lo que va del
+  mes — no corrige por estacionalidad (ej. fin de semana vs entre semana) ni por rampa de una
+  campaña nueva a mitad de mes. Es una proyección lineal simple a propósito.
+
+## 12. Roadmap propuesto (ideas, NO construidas aún)
+
+- **Comparativo mes vs mes** — cargar 2 Excels y mostrar flechas ↑↓ por sede/KPI.
+- **Modo presentación / pantalla completa** — para juntas con dirección.
+- **Metas y cumplimiento** — definir meta por sede/división y % de avance (ya existen `META DE
+  PACIENTES`/`META LEADS` en `adspend.dat` para Facebook, falta compararlas contra lo real).
+- **Heatmap sede × KPI**.
+- **Exportar a PDF ejecutivo** (one-pager).
+- **Mapa 3D**: etiquetas flotantes con el nombre sobre cada columna, texturas.
+- **CAC/leads reales por sucursal en Promociones/Google/Orgánico** — el parser (`parseAggregateAdSheet`)
+  ya está listo para leer un desglose por sede en cuanto esas 3 hojas lo traigan; hoy solo dan un
+  total agregado por canal.
+- **Traer `adspend.dat` también al "Subir Excel" del navegador** — hoy ese botón solo actualiza
+  `RECORDS` (pacientes), no `ADSPEND`; si se necesita en vivo sin pasar por `excel_to_dat.js`, falta
+  portar `extractAdSpend` a `dashboard_template.html`.
+
+## 13. Patrón para agregar una feature nueva
+
+1. **Nueva pestaña**: agrega un `<button class="tab" data-tab="x">` en `#tabbar` y una
+   `<section class="tabpanel" data-panel="x">…</section>`. En el handler de `#tabbar` puedes
+   inicializar algo perezoso (como el mapa) con `if(t==='x') ...`.
+2. **Nueva métrica**: extiende `kpis(recs)` y/o `sedeAgg(base)`; úsala en el render correspondiente.
+3. **Nuevo bloque visual**: crea `renderX(base)` y llámalo dentro de `render()` (que ya calcula
+   `base = recsForCanal(state.canal)` y `recs = selSedes(base)`).
+4. Todo reacciona al filtro global porque `render()` corre en cada cambio de canal/sede y cada
+   `renderX` filtra con `selSedes(...)`.
+
+---
+
+_Generado como handoff para continuar en Antigravity. Origen de datos: `COMERCIAL_JULIO.xlsx`._

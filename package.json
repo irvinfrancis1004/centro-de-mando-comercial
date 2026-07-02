@@ -1,0 +1,19 @@
+{
+  "name": "comercial-dash-julio",
+  "version": "1.0.0",
+  "description": "Dashboard comercial de una sola página (HTML auto-contenido) para la red de 22 clínicas. Embudo Leads → Agendados → Efectivos → Planes, por canal, división y sucursal, con mapa 3D, semáforo, focos rojos, simulador de impacto en pesos y resumen ejecutivo.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dat": "node excel_to_dat.js",
+    "build": "node build.js",
+    "update": "node excel_to_dat.js && node build.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
