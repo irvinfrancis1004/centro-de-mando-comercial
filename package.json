@@ -1,14 +1,15 @@
 {
   "name": "comercial-dash-julio",
   "version": "1.0.0",
-  "description": "Dashboard comercial de una sola página (HTML auto-contenido) para la red de 22 clínicas. Embudo Leads → Agendados → Efectivos → Planes, por canal, división y sucursal, con mapa 3D, semáforo, focos rojos y presupuesto/CAC por canal.",
+  "description": "Dashboard comercial de una sola página (HTML auto-contenido) para la red de 22 clínicas. Embudo Leads → Agendados → Efectivos → Planes, por canal, división y sucursal, con ranking por sucursal, semáforo, focos rojos y presupuesto/CAC por canal.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dat": "node excel_to_dat.js",
     "build": "node build.js",
     "update": "node excel_to_dat.js && node build.js",
-    "build:pages": "node build_pages.js"
+    "build:pages": "node build_pages.js",
+    "publish": "node publish.js"
   },
   "keywords": [],
   "author": "",
