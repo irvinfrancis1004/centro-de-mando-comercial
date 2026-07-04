@@ -1,5 +1,6 @@
 node_modules/
 .last_source
+.claude/
 
 # Datos reales de pacientes (nombres, teléfonos, padecimientos) y presupuesto — nunca a GitHub.
 # El dashboard (plantilla, scripts) sí se comparte; los datos se generan localmente con

@@ -49,9 +49,9 @@ function resolveSourcePath() {
 const SEDE_FIX = { CUATITLAN: 'CUAUTITLAN' };
 const SEDE_RENAME = { NEZAHUALCOYOTL: 'NEZA', 'PLAZA NEZAHUALCOYOTL': 'PLAZA NEZA', MODERNA: 'LA MODERNA' };
 /** El Excel trae nombres completos ("Clínica Equilibrio Total Balbuena", "Clínica FSH Mixquiahuala",
- *  "Equilibrio total Nicolás Romero"...) pero TIERS/SEDE_COORDS del dashboard usan códigos cortos
- *  ("BALBUENA", "MIXQUIAHUALA"...). Sin quitar el prefijo, ninguna sede calza con su división ni con
- *  el mapa. Se quitan los prefijos conocidos en cualquier orden/combinación y luego se renombra. */
+ *  "Equilibrio total Nicolás Romero"...) pero TIERS del dashboard usa códigos cortos
+ *  ("BALBUENA", "MIXQUIAHUALA"...). Sin quitar el prefijo, ninguna sede calza con su división.
+ *  Se quitan los prefijos conocidos en cualquier orden/combinación y luego se renombra. */
 function normSede(s) {
   if (s == null || String(s).trim() === '') return 'SIN SEDE';
   let u = String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();

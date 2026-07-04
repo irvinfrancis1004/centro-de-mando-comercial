@@ -10,10 +10,10 @@ Léelo completo antes de tocar código.
 Un **dashboard comercial de una sola página HTML, auto-contenido**, para la red de clínicas
 de rehabilitación **Equilibrio Total** (22 sedes en 3 divisiones). Diagnostica el embudo
 comercial **Leads → Agendados → Efectivos → Planes** por canal, división y sucursal, e incluye
-mapa 3D, semáforo de salud, focos rojos y presupuesto/CAC por canal.
+ranking por sucursal, semáforo de salud, focos rojos y presupuesto/CAC por canal.
 
-- **Funciona sin conexión** (offline-first). La única parte que necesita internet es la pestaña **Mapa 3D**
-  (carga MapLibre + deck.gl + mapa base desde CDN) y el botón **Subir Excel** (carga SheetJS desde CDN).
+- **Funciona sin conexión** (offline-first). La única parte que necesita internet es el botón
+  **Subir Excel** (carga SheetJS desde CDN).
 - **Sin framework**: HTML + CSS + JavaScript vanilla, todo en un archivo.
 - **No usa localStorage** ni backend. Todo el estado vive en memoria durante la sesión.
 
@@ -27,8 +27,6 @@ centro-de-mando/
 ├── channel_overrides.json          ← resoluciones manuales de duplicados entre canales (ver §5b)
 ├── build.py                        ← pacientes.dat/json -> HTML final (requiere Python)
 ├── build.js                        ← lo mismo que build.py, en Node (usar si no hay Python)
-├── build_pages.js                  ← genera docs/index.html (dashboard SIN datos, para GitHub Pages — ver §14)
-├── docs/index.html                 ← publicado en GitHub Pages, SIEMPRE sin datos (sí se sube a GitHub)
 ├── package.json                    ← dependencia `xlsx` (SheetJS) + scripts npm
 ├── .last_source                    ← recuerda qué Excel se usó la última vez (autogenerado, no se sube)
 ├── dashboard_template.html         ← FUENTE que se edita (tiene los placeholders __DATA__ y __ADSPEND__)
@@ -199,11 +197,11 @@ plantilla (junto al de `RAW_RECORDS`).
 
 **Actualizado 2026-07-02:** el botón "Subir Excel" del navegador **también** parsea presupuesto
 ahora — `extractAdSpendBrowser(wb)` (dashboard_template.html) es una copia funcional de
-`extractAdSpend` para que el dashboard publicado en GitHub Pages (sin datos horneados, ver §14)
-quede completo con solo subir el Excel, sin depender de correr `excel_to_dat.js`. `ADSPEND` pasó de
-`const` a `let` para poder reasignarse ahí. **Mantener ambas copias en sync** al tocar la lógica de
-presupuesto (mismo patrón que `parseWorkbook`, ver §5). Lo que el navegador **no** replica todavía:
-las reglas fijas (Mixquiahuala→Facebook, Orgánico gana sobre Facebook) ni el reporte de duplicados
+`extractAdSpend` para que quien suba su Excel directo en el navegador (sin correr `excel_to_dat.js`)
+tenga la pestaña Presupuesto completa igual. `ADSPEND` pasó de `const` a `let` para poder
+reasignarse ahí. **Mantener ambas copias en sync** al tocar la lógica de presupuesto (mismo patrón
+que `parseWorkbook`, ver §5). Lo que el navegador **no** replica todavía: las reglas fijas
+(Mixquiahuala→Facebook, Orgánico gana sobre Facebook) ni el reporte de duplicados
 entre canales — esas solo corren en `excel_to_dat.js`.
 
 En el dashboard, `adspendView(canal, sedeSet)` (dashboard_template.html) sirve leads/gasto reales
@@ -235,7 +233,7 @@ saca el ritmo diario (`total/díasTranscurridos`) y proyecta a fin de mes (`ritm
 usando `daysInMonth()` real del mes — 31 para julio, no hardcodeado). Se muestra en la pestaña
 **Presupuesto**, debajo de las tarjetas de leads/CAC.
 
-> Los leads/gasto de Facebook por sucursal usan los mismos códigos cortos que `TIERS`/`SEDE_COORDS`
+> Los leads/gasto de Facebook por sucursal usan los mismos códigos cortos que `TIERS`
 > (normalizados con `normSede`, ver §6) — si el nombre de una sucursal nueva no tiene un prefijo ya
 > contemplado (`CLINICA`, `EQUILIBRIO TOTAL`, `FSH`), no va a calzar y quedará fuera del desglose.
 
@@ -257,18 +255,17 @@ usando `daysInMonth()` real del mes — 31 para julio, no hardcodeado). Se muest
 - **SATELITE** no está en ningún tier → cae en "Otras / sin grupo".
 - MIXQUIAHUALA está definida pero sin datos en el archivo actual (aparecerá cuando haya registros).
 
-`tierOf(sede)` devuelve el tier de una sede. `SEDE_COORDS` tiene coordenadas aproximadas (nivel
-colonia/municipio) de las 21 sedes con datos, para el mapa 3D.
+`tierOf(sede)` devuelve el tier de una sede.
 
 > **Bug corregido 2026-07-01:** el Excel nuevo trae el nombre completo de la sucursal (`"Clínica
 > Equilibrio Total Balbuena"`, `"Clínica FSH Mixquiahuala"`, `"Equilibrio total Nicolás Romero"`)
 > en vez del código corto. `normSede()` ahora quita los prefijos conocidos (`CLINICA`,
 > `EQUILIBRIO TOTAL`, `FSH`, en cualquier combinación) y renombra casos especiales
 > (`NEZAHUALCOYOTL`→`NEZA`, `PLAZA NEZAHUALCOYOTL`→`PLAZA NEZA`, `MODERNA`→`LA MODERNA`) antes de
-> aplicar `SEDE_FIX`. Sin esto, ninguna sede calzaba con `TIERS`/`SEDE_COORDS` y la tabla de
-> sucursales/mapa 3D se veían vacíos o todo caía en "sin grupo". Si aparece una sucursal nueva con
-> un prefijo distinto, hay que agregarlo a la lista de prefijos en `normSede` (está en
-> `excel_to_dat.js` y en `dashboard_template.html`, deben coincidir).
+> aplicar `SEDE_FIX`. Sin esto, ninguna sede calzaba con `TIERS` y la tabla de sucursales/ranking
+> se veían vacíos o todo caía en "sin grupo". Si aparece una sucursal nueva con un prefijo distinto,
+> hay que agregarlo a la lista de prefijos en `normSede` (está en `excel_to_dat.js` y en
+> `dashboard_template.html`, deben coincidir).
 
 ## 7. Mapa de funciones (dónde está cada cosa)
 
@@ -298,15 +295,14 @@ Todo el JS está en el único `<script>` del final. Funciones clave:
 - `renderFocos(base)` (focos rojos: sedes ≥4 agendados, no verde, top 5 por urgencia)
 - `renderPresupuesto(recs,k)` + `adspendView(canal,sedeSet)` + `monthProjection(recs)` (leads
   reales/CAC/CPL + proyección de cierre de mes, ver §5c)
+- `renderRanking(recs)` + `rankBarsHtml(rows,valueKey,fmt)` (5 comparativas por sucursal —
+  iniciales/agendados, % asistencia, % conversión, % cierre, cuenta por cobrar — coloreadas por
+  división. Reemplazó al mapa 3D, ver §11)
 
 **Controles**
 - `buildSedeControl` / `syncSedeUI` / `setSedeFilter` (multi-select de sedes + botones de tier)
 - `setTab(t)` + handler de `#tabbar` (navegación por pestañas)
 - `state` = objeto global de estado: `{canal, sedes:Set, search, chip, padFilter, sedeSort, patSort, padSort}`
-
-**Mapa 3D** (deck.gl + MapLibre)
-- `ensureMap()` (init perezoso al abrir la pestaña, con fallback si no hay internet)
-- `buildMapData()`, `sedeLayer()` (ColumnLayer), `updateMap()` (refresca al cambiar filtro), `mapTooltip()`
 
 **Efectos**
 - Tilt 3D de tarjetas KPI: IIFE con listener `mousemove` sobre `#kgrid`.
@@ -321,12 +317,13 @@ score = 100 * ( 0.35*min(agendamiento/.30,1)
 status = score>=80 ? 'verde' : score>=55 ? 'amarillo' : 'rojo'
 ```
 
-Se usa en: focos rojos, punto/pastilla de semáforo en la tabla de sucursales y colores del mapa 3D.
+Se usa en: focos rojos y punto/pastilla de semáforo en la tabla de sucursales.
 
 ## 9. Pestañas (6) — cada una es un `<section class="tabpanel" data-panel="X">`
 
 1. **resumen** — focos rojos + embudo + KPIs (con tilt 3D) + gráficas (barras + dona)
-2. **mapa** — mapa 3D de sedes (columnas extruidas: altura=agendados, color=semáforo)
+2. **ranking** — 5 comparativas por sucursal (iniciales, % asistencia, % conversión, % cierre,
+   cuenta por cobrar), coloreadas por división. Reemplazó al mapa 3D (ver §11).
 3. **presupuesto** — leads reales/gasto/CPL/CAC (via `adspend.dat`, ver §5c) + proyección de cierre de mes
 4. **sucursales** — tabla agrupada por división, subtotales, TOTAL GENERAL, semáforo
 5. **padecimientos** — clasificador + tarjetas + barras + tabla; clic filtra la base y salta a Pacientes
@@ -350,7 +347,11 @@ Se usa en: focos rojos, punto/pastilla de semáforo en la tabla de sucursales y 
 - Base de pacientes = solo agendados (ver §4); el agendamiento real ya no sale 100% gracias a los
   leads reales de `adspend.dat` (ver §5c) — pero si un canal/sede no tiene leads reales cargados
   (Google/Orgánico hoy), su % de agendamiento vuelve a caer al 100% falso (fallback a filas).
-- Coordenadas del mapa aproximadas (colonia/municipio). Si se quiere exactitud, editar `SEDE_COORDS`.
+- **Mapa 3D removido** (petición de Irvin, 2026-07-03) — se reemplazó por la pestaña **Ranking**
+  (5 comparativas por sucursal coloreadas por división, ver §7/§9). Si se vuelve a pedir un mapa,
+  revisar el historial de `dashboard_template.html` para recuperar `SEDE_COORDS`, `ensureMap`,
+  `buildMapData`, `sedeLayer`, `mapTooltip`, `updateMap`, el CSS `.mappanel`/`.mapwrap`/etc., y los
+  `<script>`/`<link>` de MapLibre + deck.gl en el `<head>`.
 - **CAC ya se calcula** (implementado 2026-07-01, ver §5c y pestaña Presupuesto): usa `adspend.dat`
   (gasto real por canal, Facebook con desglose por sucursal) + citas efectivas de la base de
   pacientes. Las hojas `PROMOCIONES`/`GOOGLE`/`ORGANICO` hoy no traen datos capturados (0), así que
@@ -367,13 +368,9 @@ Se usa en: focos rojos, punto/pastilla de semáforo en la tabla de sucursales y 
   PACIENTES`/`META LEADS` en `adspend.dat` para Facebook, falta compararlas contra lo real).
 - **Heatmap sede × KPI**.
 - **Exportar a PDF ejecutivo** (one-pager).
-- **Mapa 3D**: etiquetas flotantes con el nombre sobre cada columna, texturas.
 - **CAC/leads reales por sucursal en Promociones/Google/Orgánico** — el parser (`parseAggregateAdSheet`)
   ya está listo para leer un desglose por sede en cuanto esas 3 hojas lo traigan; hoy solo dan un
   total agregado por canal.
-- **Traer `adspend.dat` también al "Subir Excel" del navegador** — hoy ese botón solo actualiza
-  `RECORDS` (pacientes), no `ADSPEND`; si se necesita en vivo sin pasar por `excel_to_dat.js`, falta
-  portar `extractAdSpend` a `dashboard_template.html`.
 
 ## 13. Patrón para agregar una feature nueva
 
@@ -386,27 +383,26 @@ Se usa en: focos rojos, punto/pastilla de semáforo en la tabla de sucursales y 
 4. Todo reacciona al filtro global porque `render()` corre en cada cambio de canal/sede y cada
    `renderX` filtra con `selSedes(...)`.
 
-## 14. GitHub — repo privado + dashboard público vacío (GitHub Pages)
+## 14. Compartir con el equipo (decisión 2026-07-03: sin GitHub Pages)
 
-Repo: `https://github.com/irvinfrancis1004/centro-de-mando-comercial` (**privado**).
+Se probó publicar el dashboard en GitHub Pages (repo `centro-de-mando-comercial` en la cuenta de
+Irvin) para tener un link único que el equipo solo recargara. Se descartó por completo — el repo
+y el sitio de Pages **se borraron** — porque:
 
-**Regla de oro que no se debe romper:** los datos reales de pacientes/presupuesto **nunca** se
-suben a GitHub, ni al repo ni al link público — así lo pidió Irvin (2026-07-02), después de que el
-primer intento subió `pacientes.dat`/`pacientes.json`/`adspend.dat`/`COMERCIAL_JULIO.xlsx`/
-`Centro_de_Mando_Comercial.html` por error (se corrigió reescribiendo el historial de git desde
-cero, no con un commit que solo los borrara — un commit nuevo los habría dejado igual visibles en
-el historial). El `.gitignore` excluye esos 5 archivos a propósito; **no quitarlos de ahí**.
+- GitHub Pages es gratis solo si el sitio es **público** (cualquiera con el link lo ve).
+- GitHub Pro permite activar Pages desde un repo privado, pero **no** restringe el sitio publicado
+  a colaboradores — eso solo existe en GitHub Enterprise Cloud (confirmado con la documentación
+  oficial de GitHub). Irvin pagó Pro pensando que sí, se le explicó el error y canceló.
+- Publicar datos reales de pacientes (nombre, teléfono, padecimiento) en un link público es un
+  riesgo legal real (datos de salud, sensibles bajo la LFPDPPP) — se descartó esa vía aunque Irvin
+  la consideró en el momento.
 
-**`docs/index.html`** es el dashboard publicado — igual a `Centro_de_Mando_Comercial.html` pero
-generado con `node build_pages.js` (`RAW_RECORDS=[]`, `RAW_ADSPEND={}`, siempre vacío). GitHub
-Pages sirve ese archivo en **`https://irvinfrancis1004.github.io/centro-de-mando-comercial/`**
-(configurado: Settings → Pages → branch `master` /docs). Es un link **público** (así funciona
-GitHub Pages, aunque el repo sea privado) — por eso solo se publica la plantilla vacía, nunca el
-HTML con datos horneados. Cada persona que abre el link usa **Subir Excel** para cargar su propio
-archivo; el Excel se procesa en su navegador y no sube a ningún servidor.
-
-**Al tocar `dashboard_template.html`:** correr `node build_pages.js` de nuevo y comitear
-`docs/index.html` actualizado — si no, el link público queda con el código viejo.
+**Decisión final de Irvin:** seguir compartiendo `Centro_de_Mando_Comercial.html` manualmente
+(WhatsApp, correo, o la carpeta de OneDrive donde ya vive el proyecto) cada vez que actualiza.
+Sin link web, sin hosting, sin costo. Si en el futuro se retoma la idea de un link compartido,
+la única opción gratis viable que sí cumple "Irvin actualiza, el equipo solo refresca, nadie más
+entra" es **Cloudflare Pages + Cloudflare Access** (gratis hasta 50 usuarios) — no se llegó a
+configurar. No reabrir la vía de GitHub Pages para esto, ya se descartó con evidencia.
 
 ---
 

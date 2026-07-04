@@ -7,10 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<!-- Mapa 3D (deck.gl + MapLibre) — solo se usa en la pestaña Mapa; requiere conexión -->
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<script defer src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script defer src="https://unpkg.com/deck.gl@9.0.38/dist.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
@@ -398,22 +394,30 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
 .smfdot.amarillo{background:#F5A524;box-shadow:0 0 8px -1px rgba(245,165,36,.6)}
 .smfdot.rojo{background:#FB6B5B;box-shadow:0 0 8px -1px rgba(251,107,91,.6)}
 
-/* ===== mapa 3D ===== */
-.mappanel{position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--sh);background:#0a0f14}
-#map3d{position:absolute;inset:0}
-.maphead{position:relative;z-index:2;display:flex;align-items:center;gap:10px;padding:14px 16px;flex-wrap:wrap;pointer-events:none}
-.maphead h3{margin:0;font-family:var(--disp);font-weight:600;font-size:15px}
-.maphead .sub{font-family:var(--mono);font-size:10px;color:var(--ink2)}
-.mapwrap{position:relative;height:68vh;min-height:440px}
-.maplegend{position:absolute;left:14px;bottom:14px;z-index:3;background:rgba(11,21,25,.82);backdrop-filter:blur(8px);border:1px solid var(--line2);border-radius:12px;padding:11px 13px;font-family:var(--body);font-size:11.5px;color:var(--ink2);max-width:240px}
-.maplegend b{color:var(--ink);font-size:11px;display:block;margin-bottom:7px;font-family:var(--disp)}
-.maplegend .lr{display:flex;align-items:center;gap:8px;margin:4px 0}
-.maplegend .ls{width:11px;height:11px;border-radius:3px;flex:none}
-.maplegend .lh{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-family:var(--mono);font-size:9.5px;color:var(--dim);line-height:1.5}
-.mapfallback{position:absolute;inset:0;z-index:4;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:30px;color:var(--ink2);background:radial-gradient(circle at 50% 40%,#13242A,#0B1519)}
-.mapfallback svg{width:34px;height:34px;color:var(--amber)}
-.mapfallback b{color:var(--ink);font-family:var(--disp);font-size:15px}
-.mapfallback span{font-size:12.5px;max-width:340px}
+/* ===== ranking por división ===== */
+.rankgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:980px){.rankgrid{grid-template-columns:1fr}}
+.rankcard{position:relative;background:linear-gradient(160deg,#16282F,#101F24);border:1px solid var(--line2);border-radius:16px;padding:16px 18px;box-shadow:var(--sh);overflow:hidden}
+.rankcard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--teal),var(--lime))}
+.rankcard .ph{margin-bottom:14px;display:flex;align-items:center;gap:9px}
+.rankcard .ph svg{width:17px;height:17px;color:var(--teal);flex:none}
+.rankcard .ph h3{margin:0 0 2px;font-family:var(--disp);font-weight:600;font-size:14.5px}
+.rankcard .ph small{font-family:var(--mono);font-size:10px;letter-spacing:.3px;color:var(--dim)}
+.rankrow{display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:4px 6px;border-radius:9px;transition:background .15s}
+.rankrow:hover{background:rgba(255,255,255,.03)}
+.rankrow.top1{background:linear-gradient(90deg,rgba(255,199,0,.10),transparent);padding:7px 6px;margin-bottom:12px}
+.rankbadge{width:22px;height:22px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--dim);background:rgba(255,255,255,.04)}
+.rankrow.top1 .rankbadge{width:26px;height:26px;font-size:12px;color:#3A2900;background:linear-gradient(135deg,#FFE180,#E0A526);box-shadow:0 0 14px -2px rgba(224,165,38,.7)}
+.rankrow.top2 .rankbadge{color:#1C2226;background:linear-gradient(135deg,#EAF0F2,#B9C4C9);box-shadow:0 0 10px -3px rgba(185,196,201,.6)}
+.rankrow.top3 .rankbadge{color:#2E1607;background:linear-gradient(135deg,#E3A874,#B5722F);box-shadow:0 0 10px -3px rgba(181,114,47,.6)}
+.rankrow .rnm{width:112px;flex:none;font-family:var(--body);font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+.rankrow.top1 .rnm{color:var(--ink);font-weight:700;font-size:12.5px}
+.rankrow .rnm .dv{width:7px;height:7px;border-radius:2px;flex:none}
+.ranktrack{flex:1;height:12px;background:rgba(255,255,255,.05);border-radius:7px;overflow:hidden}
+.rankrow.top1 .ranktrack{height:15px}
+.rankfill{height:100%;width:0;border-radius:7px;transition:width .8s cubic-bezier(.22,1,.36,1);box-shadow:0 0 10px -1px currentColor}
+.rankrow .rvv{width:64px;flex:none;text-align:right;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--ink)}
+.rankrow.top1 .rvv{font-size:14px;color:#FFD877}
 .maptip{font-family:var(--body);font-size:12px;line-height:1.55;padding:9px 11px!important;background:rgba(11,21,25,.94)!important;border:1px solid var(--line2)!important;border-radius:9px!important;color:var(--ink)!important;box-shadow:0 12px 30px -12px rgba(0,0,0,.9)!important}
 .maptip .tt-h{font-family:var(--disp);font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;margin-bottom:5px}
 .maptip .tt-h .d{width:8px;height:8px;border-radius:3px}
@@ -507,7 +511,7 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   <!-- TABS -->
   <nav class="tabbar" id="tabbar">
     <button class="tab on" data-tab="resumen"><svg viewBox="0 0 24 24" fill="none"><path d="M3 3h7v7H3zM14 3h7v4h-7zM14 11h7v10h-7zM3 14h7v7H3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>Resumen</button>
-    <button class="tab" data-tab="mapa"><svg viewBox="0 0 24 24" fill="none"><path d="M9 20 3 17V4l6 3m0 13 6-3m-6 3V7m6 10 6 3V7l-6-3m0 13V4m0 0L9 7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Mapa 3D</button>
+    <button class="tab" data-tab="ranking"><svg viewBox="0 0 24 24" fill="none"><path d="M3 21h4v-7H3zM10 21h4V9h-4zM17 21h4V4h-4z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Ranking</button>
     <button class="tab" data-tab="presupuesto"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Presupuesto</button>
     <button class="tab" data-tab="sucursales"><svg viewBox="0 0 24 24" fill="none"><path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h0M9 13h0M9 17h0M15 9h0M15 13h0M15 17h0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Sucursales <span class="tcount" id="tc-sed">0</span></button>
     <button class="tab" data-tab="padecimientos"><svg viewBox="0 0 24 24" fill="none"><path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Padecimientos <span class="tcount" id="tc-pad">0</span></button>
@@ -605,27 +609,32 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   </div>
   </section>
 
-  <!-- TAB: MAPA 3D -->
-  <section class="tabpanel" data-panel="mapa">
-    <div class="mappanel">
-      <div class="maphead">
-        <h3>Mapa 3D de la red</h3>
-        <span class="sub">altura = agendados · color = semáforo · arrastra para girar e inclinar</span>
+  <!-- TAB: RANKING -->
+  <section class="tabpanel" data-panel="ranking">
+    <div class="th-bar">
+      <h3>Ranking por sucursal</h3>
+      <span class="hint">Todas las sucursales, coloreadas por división (Corporativo · Franquicias · Tercerizadas) · ordenadas de mayor a menor en cada gráfica</span>
+    </div>
+    <div class="rankgrid">
+      <div class="rankcard">
+        <div class="ph"><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><h3>Más pacientes que sí llegaron</h3><small>efectivos (asistieron) por sucursal</small></div></div>
+        <div id="rankEfectivos"></div>
       </div>
-      <div class="mapwrap">
-        <div id="map3d"></div>
-        <div class="maplegend">
-          <b>Semáforo de salud</b>
-          <div class="lr"><span class="ls" style="background:#86DD57"></span>Verde — en meta</div>
-          <div class="lr"><span class="ls" style="background:#F5A524"></span>Amarillo — por debajo</div>
-          <div class="lr"><span class="ls" style="background:#FB6B5B"></span>Rojo — crítico</div>
-          <div class="lh">La altura de cada columna es el volumen de agendados. Ubicaciones aproximadas por colonia/municipio.</div>
-        </div>
-        <div class="mapfallback" id="mapFallback">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M12 9v4m0 4h.01M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6A2 2 0 0 0 22 18L13.7 3.9a2 2 0 0 0-3.4 0Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <b>El mapa 3D necesita conexión a internet</b>
-          <span>Las librerías del mapa se cargan en línea. Conéctate y vuelve a abrir esta pestaña — el resto del tablero funciona sin conexión.</span>
-        </div>
+      <div class="rankcard">
+        <div class="ph"><svg viewBox="0 0 24 24" fill="none"><path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><div><h3>Mejor % de asistencia</h3><small>efectivos entre agendados</small></div></div>
+        <div id="rankAsistencia"></div>
+      </div>
+      <div class="rankcard">
+        <div class="ph"><svg viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><div><h3>Mejor % de conversión</h3><small>agendados entre leads reales</small></div></div>
+        <div id="rankConversion"></div>
+      </div>
+      <div class="rankcard">
+        <div class="ph"><svg viewBox="0 0 24 24" fill="none"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><div><h3>Mejor % de cierre de planes</h3><small>planes aperturados entre efectivos</small></div></div>
+        <div id="rankCierre"></div>
+      </div>
+      <div class="rankcard">
+        <div class="ph"><svg viewBox="0 0 24 24" fill="none"><path d="M12 8v5m0 3h.01M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><div><h3>Más cuenta por cobrar</h3><small>saldo pendiente de planes</small></div></div>
+        <div id="rankCxc"></div>
       </div>
     </div>
   </section>
@@ -774,8 +783,8 @@ function fmtDate(iso){
 }
 const SEDE_FIX = {'CUATITLAN':'CUAUTITLAN'};
 const SEDE_RENAME = {'NEZAHUALCOYOTL':'NEZA','PLAZA NEZAHUALCOYOTL':'PLAZA NEZA','MODERNA':'LA MODERNA'};
-/* el Excel trae nombres completos ("Clínica Equilibrio Total Balbuena"...) pero TIERS/SEDE_COORDS
-   usan códigos cortos ("BALBUENA") — se quitan los prefijos conocidos y se renombra */
+/* el Excel trae nombres completos ("Clínica Equilibrio Total Balbuena"...) pero TIERS
+   usa códigos cortos ("BALBUENA") — se quitan los prefijos conocidos y se renombra */
 function normSede(s){
   if(s==null||String(s).trim()==='') return 'SIN SEDE';
   let u=String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').trim().toUpperCase();
@@ -968,8 +977,8 @@ function render(){
   if($('tc-pad')) $('tc-pad').textContent=nPad;
   if($('tc-pac')) $('tc-pac').textContent=nf.format(nPac);
 
-  // 3D map (si ya está activo)
-  updateMap();
+  // ranking por sucursal/división
+  renderRanking(recs);
 
   // presupuesto / CAC / proyección de cierre de mes
   renderPresupuesto(recs, k, av);
@@ -1467,7 +1476,6 @@ $('tabbar').addEventListener('click',e=>{ const b=e.target.closest('.tab'); if(!
   const t=b.dataset.tab;
   document.querySelectorAll('#tabbar .tab').forEach(x=>x.classList.toggle('on',x===b));
   document.querySelectorAll('.tabpanel').forEach(p=>p.classList.toggle('on',p.dataset.panel===t));
-  if(t==='mapa') ensureMap();
   window.scrollTo({top:0,behavior:'smooth'}); });
 
 /* sede multi-select popover */
@@ -1663,59 +1671,32 @@ function extractAdSpendBrowser(wb){
   $('clk-date').textContent = d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})+' · '+d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
 })();
 
-/* ---------- mapa 3D de sedes (deck.gl + MapLibre) ---------- */
-const SEDE_COORDS = {
-  'AJUSCO':[-99.20,19.27],'BALBUENA':[-99.10,19.42],'CHALCO':[-98.90,19.26],'CLAVERIA':[-99.18,19.48],
-  'COACALCO':[-99.10,19.63],'CUAUTITLAN':[-99.18,19.67],'CUAUTLA':[-98.95,18.81],'ECATEPEC':[-99.05,19.60],
-  'LA MODERNA':[-99.14,19.39],'MILPA ALTA':[-99.02,19.19],'NEZA':[-99.03,19.40],'NICOLAS ROMERO':[-99.32,19.62],
-  'PACHUCA':[-98.76,20.10],'PLAZA NEZA':[-99.01,19.43],'QUERETARO':[-100.39,20.59],'SAN JUAN DEL RIO':[-99.99,20.39],
-  'SATELITE':[-99.24,19.51],'TEPEYAC':[-99.12,19.48],'TLAHUAC':[-99.00,19.28],'VALLE DORADO':[-99.20,19.55],
-  'XOCHIMILCO':[-99.10,19.26]
-};
-let _map=null,_deck=null,_mapReady=false,_mapTried=false;
-function mapColor(st){ return st==='verde'?[134,221,87,205]:st==='amarillo'?[245,165,36,212]:[251,107,91,218]; }
-function buildMapData(){
-  const agg=sedeAgg(selSedes(recsForCanal(state.canal)));
-  const out=[];
-  for(const s of agg){ const c=SEDE_COORDS[s.sede]; if(!c) continue; const h=salud(s);
-    out.push({sede:titleCase(s.sede),lng:c[0],lat:c[1],n:s.n,asisR:s.asisR,convR:s.convR,
-      status:h.status,score:h.score,div:s.divLabel,divColor:s.divColor,color:mapColor(h.status)}); }
-  return out;
+/* ---------- ranking por sucursal/división ----------
+   4 comparativas pedidas por Irvin (2026-07-03): quién lleva más iniciales (agendados), quién
+   tiene mejor % de asistencia, quién tiene mejor % de conversión (agendamiento sobre leads
+   reales) y mejor % de cierre de planes, y quién trae más cuentas por cobrar. Reemplaza al mapa 3D. */
+function rankBarsHtml(rows,valueKey,fmt){
+  if(!rows.length) return '<div class="empty">Sin datos para esta vista.</div>';
+  const max=Math.max(...rows.map(r=>r[valueKey]),1e-9);
+  return rows.map((r,i)=>`
+    <div class="rankrow ${i<3?'top'+(i+1):''}">
+      <span class="rankbadge">${i+1}</span>
+      <span class="rnm" title="${titleCase(r.sede)}"><span class="dv" style="background:${r.divColor}"></span>${titleCase(r.sede)}</span>
+      <div class="ranktrack"><div class="rankfill" data-w="${(r[valueKey]/max*100).toFixed(1)}" style="width:0%;background:${r.divColor};color:${r.divColor}"></div></div>
+      <span class="rvv">${fmt(r[valueKey])}</span>
+    </div>`).join('');
 }
-function sedeLayer(){
-  return new deck.ColumnLayer({ id:'sedes', data:buildMapData(), diskResolution:28, radius:1000,
-    extruded:true, pickable:true, radiusUnits:'meters', elevationScale:1,
-    getPosition:d=>[d.lng,d.lat], getFillColor:d=>d.color, getElevation:d=>Math.max(d.n,1)*700,
-    material:{ambient:.55,diffuse:.6,shininess:48,specularColor:[70,90,100]},
-    transitions:{getElevation:{duration:600},getFillColor:{duration:400}} });
+function renderRanking(recs){
+  if(!$('rankEfectivos')) return;
+  const agg=sedeAgg(recs);
+  const by=(key)=>[...agg].sort((a,b)=>b[key]-a[key]);
+  $('rankEfectivos').innerHTML=rankBarsHtml(by('asis'),'asis',asInt);
+  $('rankAsistencia').innerHTML=rankBarsHtml(by('asisR'),'asisR',pct);
+  $('rankConversion').innerHTML=rankBarsHtml(by('schedR'),'schedR',pct);
+  $('rankCierre').innerHTML=rankBarsHtml(by('convR'),'convR',pct);
+  $('rankCxc').innerHTML=rankBarsHtml(by('cxc'),'cxc',asMoney);
+  setTimeout(()=>{ document.querySelectorAll('[data-panel="ranking"] .rankfill').forEach(el=>{ el.style.width=el.dataset.w+'%'; }); },40);
 }
-function mapTooltip(d){
-  return `<div class="tt-h"><span class="d" style="background:${d.divColor}"></span>${d.sede}</div>`+
-    `<div class="tt-r"><span>${d.div}</span><b>salud ${d.score}/100</b></div>`+
-    `<div class="tt-r"><span>Agendados</span><b>${d.n}</b></div>`+
-    `<div class="tt-r"><span>Asistencia</span><b>${pct(d.asisR)}</b></div>`+
-    `<div class="tt-r"><span>Cierre</span><b>${pct(d.convR)}</b></div>`;
-}
-function ensureMap(){
-  if(_mapReady){ updateMap(); if(_map) setTimeout(()=>_map.resize(),60); return; }
-  if(typeof maplibregl==='undefined' || typeof deck==='undefined'){ $('mapFallback').style.display='flex'; return; }
-  if(_mapTried) return; _mapTried=true; $('mapFallback').style.display='none';
-  try{
-    _map=new maplibregl.Map({ container:'map3d',
-      style:'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
-      center:[-99.15,19.55], zoom:8.0, pitch:52, bearing:-17, antialias:true, attributionControl:false });
-    _map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'top-right');
-    _map.on('load',()=>{ _mapReady=true;
-      _deck=new deck.MapboxOverlay({ layers:[sedeLayer()],
-        getTooltip:({object})=> object ? {html:mapTooltip(object),className:'maptip'} : null });
-      _map.addControl(_deck);
-      setTimeout(()=>_map.resize(),80);
-    });
-    _map.on('error',()=>{});
-    setTimeout(()=>{ if(!_mapReady){ $('mapFallback').style.display='flex'; } },7000);
-  }catch(e){ console.error(e); $('mapFallback').style.display='flex'; }
-}
-function updateMap(){ if(_mapReady && _deck){ _deck.setProps({layers:[sedeLayer()]}); } }
 
 /* ---------- tilt 3D en tarjetas KPI ---------- */
 (function(){ const kg=document.getElementById('kgrid'); if(!kg) return;

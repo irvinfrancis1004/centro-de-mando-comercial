@@ -1,17 +1,17 @@
 # Centro de Mando Comercial · Equilibrio Total
 
 Dashboard comercial de una sola página (HTML auto-contenido) para la red de 22 clínicas.
-Embudo Leads → Agendados → Efectivos → Planes, por canal, división y sucursal, con mapa 3D,
-semáforo, focos rojos y presupuesto/CAC por canal.
+Embudo Leads → Agendados → Efectivos → Planes, por canal, división y sucursal, con ranking
+por sucursal, semáforo, focos rojos y presupuesto/CAC por canal.
 
 ## Abrir
 
 Doble clic en **`Centro_de_Mando_Comercial.html`**. No necesita servidor.
-(La pestaña *Mapa 3D* y el botón *Subir Excel* sí necesitan internet.)
+(Solo el botón *Subir Excel* necesita internet.)
 
-**O usa el link público (sin instalar nada):** https://irvinfrancis1004.github.io/centro-de-mando-comercial/
-Abre sin datos — usa el botón **Subir Excel** para cargar tu archivo del mes. Todo se procesa en
-tu navegador, nunca sube a ningún servidor.
+Para compartirlo con el equipo, se manda el archivo directo (WhatsApp, correo o la carpeta de
+OneDrive del proyecto) cada vez que se actualiza — no hay link web público (se evaluó y se
+descartó por el riesgo de exponer datos de pacientes; ver AGENTS.md §14 para el detalle).
 
 ## Actualizar los datos del mes
 
