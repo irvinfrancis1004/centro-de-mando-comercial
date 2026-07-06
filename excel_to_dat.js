@@ -199,7 +199,7 @@ function extractPatientRows(rows, canalFor) {
   const ci = {
     dia: col('DIA'), nom: col('NOMBRE'), ape: col('APELLIDO'), num: col('NUMERO', 'NÚMERO'), fec: col('FECHA DE AGENDA', 'AGENDA'),
     sede: col('SEDE'), asis: col('ASISTE'), costo: col('COSTO'), plan: col('PLAN'), monto: col('MONTO'),
-    cxc: col('CXC', 'CUENTA'), pad: col('PADECIMIENTO'),
+    cxc: col('CXC', 'CUENTA'), pad: col('PADECIMIENTO'), servicio: col('SERVICIO'),
   };
   for (let i = hr + 1; i < rows.length; i++) {
     const row = rows[i];
@@ -222,34 +222,46 @@ function extractPatientRows(rows, canalFor) {
       monto: ci.monto >= 0 && isNum(row[ci.monto]) ? row[ci.monto] : 0,
       cxc: ci.cxc >= 0 && isNum(row[ci.cxc]) ? row[ci.cxc] : 0,
       padecimiento,
+      servicio: ci.servicio >= 0 && row[ci.servicio] != null ? String(row[ci.servicio]).trim() : '',
     });
   }
   return out;
 }
 
 function parseWorkbook(wb) {
+  let out;
   // Formato nuevo (desde 2026-07): una sola hoja "BASE DE PACIENTES" para los 4 canales; el canal
   // de cada paciente se detecta por palabra clave en el comentario (ver detectCanalFromPad).
   const unifiedName = wb.SheetNames.find(n => /^\s*BASE DE PACIENTES\s*$/i.test(n));
   if (unifiedName) {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[unifiedName], { header: 1, defval: null, raw: true, blankrows: false });
-    return extractPatientRows(rows, detectCanalFromPad);
+    out = extractPatientRows(rows, detectCanalFromPad);
+  } else {
+    // Formato viejo: una hoja "BASE DE PACIENTES ... <CANAL>" por canal.
+    const map = [
+      { canal: 'FACEBOOK', re: /BASE DE PACIENTES.*FACEBOO/i },
+      { canal: 'PROMOCIONES', re: /BASE DE PACIENTES.*PROMO/i },
+      { canal: 'GOOGLE', re: /BASE DE PACIENTES.*GOOGLE/i },
+      { canal: 'ORGANICO', re: /BASE DE PACIENTES.*ORGANIC/i },
+    ];
+    out = [];
+    for (const m of map) {
+      const name = wb.SheetNames.find(n => m.re.test(n));
+      if (!name) continue;
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: null, raw: true, blankrows: false });
+      out.push(...extractPatientRows(rows, () => m.canal));
+    }
   }
 
-  // Formato viejo: una hoja "BASE DE PACIENTES ... <CANAL>" por canal.
-  const map = [
-    { canal: 'FACEBOOK', re: /BASE DE PACIENTES.*FACEBOO/i },
-    { canal: 'PROMOCIONES', re: /BASE DE PACIENTES.*PROMO/i },
-    { canal: 'GOOGLE', re: /BASE DE PACIENTES.*GOOGLE/i },
-    { canal: 'ORGANICO', re: /BASE DE PACIENTES.*ORGANIC/i },
-  ];
-  const out = [];
-  for (const m of map) {
-    const name = wb.SheetNames.find(n => m.re.test(n));
-    if (!name) continue;
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: null, raw: true, blankrows: false });
-    out.push(...extractPatientRows(rows, () => m.canal));
+  // GERONTOLOGIA (desde 2026-07-06): hoja aparte "BASE DE GERONTOLOGIA", siempre canal fijo.
+  // Columnas propias: SERVICIO en vez de SEDE/PADECIMIENTO, sin DIA — extractPatientRows ya
+  // rellena esos huecos con default (SIN SEDE / null / '') sin romper nada.
+  const gerontoName = wb.SheetNames.find(n => /BASE DE.*GERONTOLOG/i.test(n));
+  if (gerontoName) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[gerontoName], { header: 1, defval: null, raw: true, blankrows: false });
+    out.push(...extractPatientRows(rows, () => 'GERONTOLOGIA'));
   }
+
   return out;
 }
 
@@ -324,6 +336,7 @@ function extractAdSpend(wb) {
     PROMOCIONES: { total: parseAggregateAdSheet(sheetRows('PROMOCIONES')) },
     GOOGLE: { total: parseAggregateAdSheet(sheetRows('GOOGLE')) },
     ORGANICO: { total: parseAggregateAdSheet(sheetRows('ORGANICO')) },
+    GERONTOLOGIA: { total: parseAggregateAdSheet(sheetRows('GERONTOLOGIA')) },
   };
 }
 

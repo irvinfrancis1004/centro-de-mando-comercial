@@ -18,7 +18,7 @@
   --amber:#F5A524; --amber-d:#C47E10;
   --coral:#FB6B5B; --coral-d:#C44A3D;
   --blue:#5B8DEF;
-  --c-fb:#5B8DEF; --c-promo:#F178B6; --c-google:#59C9A5; --c-organico:#9B7EDE;
+  --c-fb:#5B8DEF; --c-promo:#F178B6; --c-google:#59C9A5; --c-organico:#9B7EDE; --c-geronto:#5FD68A;
   --r:14px; --r-sm:9px;
   --sh:0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -28px rgba(0,0,0,.9);
   --mono:'Space Mono',monospace; --disp:'Space Grotesk',sans-serif; --body:'Plus Jakarta Sans',sans-serif;
@@ -484,6 +484,7 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
       <button data-c="PROMOCIONES"><span class="dot" style="background:var(--c-promo)"></span>Promociones</button>
       <button data-c="GOOGLE"><span class="dot" style="background:var(--c-google)"></span>Google</button>
       <button data-c="ORGANICO"><span class="dot" style="background:var(--c-organico)"></span>Orgánico</button>
+      <button data-c="GERONTOLOGIA"><span class="dot" style="background:var(--c-geronto)"></span>Gerontología</button>
     </div>
     <div class="fl">
       <label>Sedes</label>
@@ -606,6 +607,12 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- SERVICIOS (solo aparece si la vista actual trae registros con "servicio", p.ej. Gerontología) -->
+  <div class="panel-c" id="servicioPanel" style="display:none">
+    <div class="ph"><h3>Por servicio</h3><small>agendados · efectivos · planes cerrados</small></div>
+    <div id="servicioBars"></div>
   </div>
   </section>
 
@@ -896,7 +903,7 @@ function detectMirrors(){
   for(const r of RECORDS){ (byCanal[r.canal]=byCanal[r.canal]||[]).push(r.nombre+'|'+r.numero); }
   const fb=(byCanal['FACEBOOK']||[]).slice().sort().join('§');
   const mir=[];
-  for(const c of ['PROMOCIONES','GOOGLE','ORGANICO']){
+  for(const c of ['PROMOCIONES','GOOGLE','ORGANICO','GERONTOLOGIA']){
     const arr=(byCanal[c]||[]).slice().sort().join('§');
     if(arr.length>0 && arr===fb) mir.push(c);
   }
@@ -967,6 +974,9 @@ function render(){
 
   // padecimiento analytics
   renderPad(base);
+
+  // servicio (Gerontología y futuros canales con columna SERVICIO)
+  renderServicio(base);
 
   // patient table
   renderPatients(base);
@@ -1042,7 +1052,7 @@ function renderKpis(k){
 let ADSPEND = (typeof RAW_ADSPEND!=='undefined' && RAW_ADSPEND) ? RAW_ADSPEND : {};
 const MONEY0=new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0});
 function adspendView(canal,sedeSet){
-  const canales = canal==='TODOS' ? ['FACEBOOK','PROMOCIONES','GOOGLE','ORGANICO'] : [canal];
+  const canales = canal==='TODOS' ? ['FACEBOOK','PROMOCIONES','GOOGLE','ORGANICO','GERONTOLOGIA'] : [canal];
   let leads=0, gastado=0, bySedeAvailable=false;
   for(const c of canales){
     const ch=ADSPEND[c]; if(!ch) continue;
@@ -1465,6 +1475,35 @@ function renderPad(base){
   });
 }
 
+/* ---------- por servicio (Gerontología y futuros canales con columna SERVICIO) ----------
+   A diferencia de padecimiento (texto libre, necesita el clasificador PAD_GROUPS), servicio ya
+   viene limpio del Excel ("Consulta Inicial Gerontologia", "Clase baile gerontología"...), así que
+   se agrupa por el valor exacto, sin clasificador. Panel oculto si no hay servicio en la vista. */
+function servicioAgg(base){
+  const m={};
+  for(const r of base){ if(!r.servicio) continue;
+    const s=(m[r.servicio]=m[r.servicio]||{servicio:r.servicio,n:0,asis:0,plan:0});
+    s.n++; if(r.asiste==='SI') s.asis++; if(r.plan==='SI') s.plan++; }
+  return Object.values(m);
+}
+function renderServicio(base){
+  const panel=$('servicioPanel'); if(!panel) return;
+  const agg=servicioAgg(selSedes(base));
+  if(!agg.length){ panel.style.display='none'; return; }
+  panel.style.display='';
+  const byN=[...agg].sort((a,b)=>b.n-a.n);
+  const maxN=Math.max(1,...byN.map(s=>s.n));
+  $('servicioBars').innerHTML=byN.map(s=>`
+    <div class="padrow" style="cursor:default">
+      <span class="pn"><span class="dt" style="background:var(--c-geronto)"></span><span>${s.servicio}</span></span>
+      <div class="ptrack">
+        <div class="pfill tot" style="width:${s.n/maxN*100}%;background:var(--c-geronto)"></div>
+        <div class="pfill asis" style="width:${s.asis/maxN*100}%;background:var(--c-geronto)"></div>
+      </div>
+      <span class="pvv"><b>${s.n}</b> agend · <i style="color:var(--c-geronto)">${s.asis}</i> efec · <b>${s.plan}</b> plan</span>
+    </div>`).join('');
+}
+
 /* ---------- events ---------- */
 $('segCanal').addEventListener('click',e=>{ const b=e.target.closest('button'); if(!b)return;
   state.canal=b.dataset.c;
@@ -1572,7 +1611,7 @@ function extractPatientRows(rows,canalFor){
   const head=rows[hr].map(c=>c==null?'':String(c).trim().toUpperCase());
   const col=(...keys)=>{ for(const k of keys){ const idx=head.findIndex(h=>h.includes(k)); if(idx>=0) return idx; } return -1; };
   const ci={ dia:col('DIA'),nom:col('NOMBRE'),ape:col('APELLIDO'),num:col('NUMERO','NÚMERO'),fec:col('FECHA DE AGENDA','AGENDA'),
-    sede:col('SEDE'),asis:col('ASISTE'),costo:col('COSTO'),plan:col('PLAN'),monto:col('MONTO'),cxc:col('CXC','CUENTA'),pad:col('PADECIMIENTO') };
+    sede:col('SEDE'),asis:col('ASISTE'),costo:col('COSTO'),plan:col('PLAN'),monto:col('MONTO'),cxc:col('CXC','CUENTA'),pad:col('PADECIMIENTO'),servicio:col('SERVICIO') };
   const isNum=(v)=>typeof v==='number'&&isFinite(v);
   for(let i=hr+1;i<rows.length;i++){
     const row=rows[i]; const nm=ci.nom>=0?row[ci.nom]:null;
@@ -1592,29 +1631,38 @@ function extractPatientRows(rows,canalFor){
       plan:ci.plan>=0&&row[ci.plan]!=null?String(row[ci.plan]).trim().toUpperCase():'SIN DATO',
       monto:ci.monto>=0&&isNum(row[ci.monto])?row[ci.monto]:0,
       cxc:ci.cxc>=0&&isNum(row[ci.cxc])?row[ci.cxc]:0,
-      padecimiento });
+      padecimiento,
+      servicio:ci.servicio>=0&&row[ci.servicio]!=null?String(row[ci.servicio]).trim():'' });
   }
   return out;
 }
 function parseWorkbook(wb){
+  let out;
   /* formato nuevo: una sola hoja "BASE DE PACIENTES", canal detectado por texto */
   const unifiedName=wb.SheetNames.find(n=>/^\s*BASE DE PACIENTES\s*$/i.test(n));
   if(unifiedName){
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[unifiedName],{header:1,defval:null,raw:true,blankrows:false});
-    return extractPatientRows(rows,detectCanalFromPad);
+    out=extractPatientRows(rows,detectCanalFromPad);
+  } else {
+    /* formato viejo: una hoja "BASE DE PACIENTES ... <CANAL>" por canal */
+    const map=[
+      {canal:'FACEBOOK',re:/BASE DE PACIENTES.*FACEBOO/i},
+      {canal:'PROMOCIONES',re:/BASE DE PACIENTES.*PROMO/i},
+      {canal:'GOOGLE',re:/BASE DE PACIENTES.*GOOGLE/i},
+      {canal:'ORGANICO',re:/BASE DE PACIENTES.*ORGANIC/i},
+    ];
+    out=[];
+    for(const m of map){
+      const name=wb.SheetNames.find(n=>m.re.test(n)); if(!name) continue;
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:null,raw:true,blankrows:false});
+      out.push(...extractPatientRows(rows,()=>m.canal));
+    }
   }
-  /* formato viejo: una hoja "BASE DE PACIENTES ... <CANAL>" por canal */
-  const map=[
-    {canal:'FACEBOOK',re:/BASE DE PACIENTES.*FACEBOO/i},
-    {canal:'PROMOCIONES',re:/BASE DE PACIENTES.*PROMO/i},
-    {canal:'GOOGLE',re:/BASE DE PACIENTES.*GOOGLE/i},
-    {canal:'ORGANICO',re:/BASE DE PACIENTES.*ORGANIC/i},
-  ];
-  const out=[];
-  for(const m of map){
-    const name=wb.SheetNames.find(n=>m.re.test(n)); if(!name) continue;
-    const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:null,raw:true,blankrows:false});
-    out.push(...extractPatientRows(rows,()=>m.canal));
+  /* GERONTOLOGIA: hoja aparte "BASE DE GERONTOLOGIA", siempre canal fijo (columnas propias: SERVICIO) */
+  const gerontoName=wb.SheetNames.find(n=>/BASE DE.*GERONTOLOG/i.test(n));
+  if(gerontoName){
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[gerontoName],{header:1,defval:null,raw:true,blankrows:false});
+    out.push(...extractPatientRows(rows,()=>'GERONTOLOGIA'));
   }
   return out;
 }
@@ -1663,7 +1711,8 @@ function extractAdSpendBrowser(wb){
   return { FACEBOOK:{bySede:facebookBySede,total:facebookTotal},
     PROMOCIONES:{total:parseAggregateAdSheetBrowser(sheetRows('PROMOCIONES'))},
     GOOGLE:{total:parseAggregateAdSheetBrowser(sheetRows('GOOGLE'))},
-    ORGANICO:{total:parseAggregateAdSheetBrowser(sheetRows('ORGANICO'))} };
+    ORGANICO:{total:parseAggregateAdSheetBrowser(sheetRows('ORGANICO'))},
+    GERONTOLOGIA:{total:parseAggregateAdSheetBrowser(sheetRows('GERONTOLOGIA'))} };
 }
 
 /* ---------- clock ---------- */

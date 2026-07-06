@@ -77,12 +77,12 @@ dashboard queda auto-contenido otra vez.
 Cada registro (fila del Excel, ya limpio) es un objeto:
 
 ```
-canal            'FACEBOOK' | 'PROMOCIONES' | 'GOOGLE'
+canal            'FACEBOOK' | 'PROMOCIONES' | 'GOOGLE' | 'ORGANICO' | 'GERONTOLOGIA'
 dia              fecha ISO (día del registro)
 nombre           string
 numero           string (teléfono)
 fecha            fecha ISO de la CITA (fecha de agenda). Su presencia define "agendado".
-sede             string en MAYÚSCULAS (normalizada)
+sede             string en MAYÚSCULAS (normalizada); 'SIN SEDE' si el canal no la trae (GERONTOLOGIA)
 asiste           'SI' | 'NO' | 'PENDIENTE' | 'SIN DATO'
 costo_pago       number (si el costo venía como número = pagado)
 costo_pendiente  bool (si el costo venía como texto = pago pendiente)
@@ -90,6 +90,7 @@ plan             'SI' | 'NO' | 'SIN DATO'
 monto            number (valor del plan aperturado)
 cxc              number (cuenta por cobrar)
 padecimiento     string libre (texto del CRM)
+servicio         string — solo GERONTOLOGIA la trae hoy ("Consulta Inicial Gerontologia"...); '' en los demás canales (ver §5d)
 padGrp           string — se agrega en runtime (annotatePad) con el clasificador
 ```
 
@@ -246,6 +247,38 @@ usando `daysInMonth()` real del mes — 31 para julio, no hardcodeado). Se muest
 > trae algo como `"Equilibrio total | Nicolás Romero | Fisioterapia & Rehabilitación"` (texto de un
 > anuncio, no solo el nombre). `normSede` detecta el `|` y toma el primer segmento no vacío como
 > nombre de sede (después de quitar los prefijos conocidos).
+
+## 5d. Canal GERONTOLOGIA (agregado 2026-07-06)
+
+Irvin agregó un servicio nuevo (gerontología) con su propia hoja de pacientes, estructuralmente
+distinta a las demás:
+
+- **`BASE DE GERONTOLOGIA`**: hoja de pacientes aparte (no entra en la hoja unificada `BASE DE
+  PACIENTES`). Columnas propias: `NOMBRE`, `APELLIDO`, `NUMERO`, `FECHA DE AGENDA`, **`SERVICIO`**
+  (ej. `"Consulta Inicial Gerontologia"`, `"Clase baile gerontología"`) en vez de `SEDE`/`PADECIMIENTO`,
+  `ASISTE`, `COSTO INICIAL` (puede venir texto tipo `"NO HAY PAGO"` — se maneja igual que en las
+  demás bases), `PLAN`, `MONTO`, `CXC`. **No trae `SEDE` ni `DIA`.**
+- **`GERONTOLOGIA`**: hoja de presupuesto agregado (`LEADS`/`PRESUPUESTO`), mismo patrón que
+  `PROMOCIONES`/`GOOGLE`/`ORGANICO`.
+
+`parseWorkbook` (excel_to_dat.js y dashboard_template.html) busca `BASE DE.*GERONTOLOG` **siempre**,
+sin importar si el archivo usa el formato unificado o el viejo por canal — es una hoja adicional,
+independiente, con canal fijo `'GERONTOLOGIA'` para todas sus filas (no se detecta por texto).
+`extractPatientRows` ya rellena los huecos con su default normal (`sede:'SIN SEDE'`, `dia:null`)
+sin romper nada — **gerontología no tiene sucursal**, por diseño; cae en "Otras / sin grupo" en la
+tabla de Sucursales y no aparece en el desglose por sede de Presupuesto.
+
+**Campo nuevo `servicio`** (string, `''` por default en los demás canales): se agrega a todo
+registro vía `col('SERVICIO')` en `extractPatientRows`. A diferencia de `padecimiento` (texto libre
+que necesita el clasificador `PAD_GROUPS`), `servicio` ya viene limpio del Excel, así que se agrupa
+por **valor exacto** con `servicioAgg(base)` — sin clasificador. `renderServicio(base)` pinta el
+panel **"Por servicio"** en la pestaña Resumen (reutiliza el CSS `.padrow`/`.ptrack`/`.pfill` de
+Padecimientos); el panel se **oculta solo** (`display:none`) si la vista actual no tiene ningún
+registro con `servicio` (o sea, para Facebook/Promociones/Google/Orgánico no aparece).
+
+`GERONTOLOGIA` se agregó también a: `segCanal` (botón + `--c-geronto`), `detectMirrors`,
+`adspendView`'s lista de canales para Consolidado. El resto (KPIs, embudo, Ranking, Sucursales)
+lo toma solo porque son genéricos sobre `state.canal`/`recsForCanal` — no necesitaron cambios.
 
 ## 6. Divisiones (tiers) — array `TIERS`
 
