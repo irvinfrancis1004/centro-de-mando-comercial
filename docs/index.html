@@ -668,7 +668,7 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   <div class="tblpanel">
     <div class="th-bar">
       <h3>Resumen por sucursal</h3>
-      <span class="hint">Agrupado por división · clic en encabezados para ordenar dentro de cada grupo</span>
+      <span class="hint">Agrupado por división · clic en encabezados para ordenar dentro de cada grupo · "Meta del mes" solo cuenta pacientes que asistieron y pagaron su consulta inicial</span>
     </div>
     <div class="tscroll">
       <table id="sedeTable">
@@ -1185,7 +1185,9 @@ function sedeAgg(base){
   const m={};
   for(const r of base){ const s=(m[r.sede]=m[r.sede]||{sede:r.sede,leads:0,n:0,nMes:0,asis:0,plan:0,ing:0,monto:0,cxc:0,nMonto:0,_canalRows:{}});
     s._canalRows[r.canal]=(s._canalRows[r.canal]||0)+1;
-    s.leads++; if(hasCita(r)){ s.n++; if(enMesActual(r,ci)) s.nMes++; }
+    s.leads++; if(hasCita(r)) s.n++;
+    // para la meta solo cuentan los que de verdad acuden Y pagan su consulta inicial (Irvin, 2026-07-06)
+    if(r.asiste==='SI' && r.costo_pago>0 && enMesActual(r,ci)) s.nMes++;
     if(r.asiste==='SI'){s.asis++; s.ing+=r.costo_pago||0;} if(r.plan==='SI')s.plan++;
     s.monto+=r.monto||0; s.cxc+=r.cxc||0; if((r.monto||0)>0) s.nMonto++; }
   return Object.values(m).map(s=>{ const {_canalRows,...rest}=s; const t=tierOf(s.sede);
