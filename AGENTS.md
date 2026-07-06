@@ -315,9 +315,12 @@ Todo el JS está en el único `<script>` del final. Funciones clave:
 - `kpis(recs, realLeads?)` → objeto con leads, agendados, efectivos, planes, tasas, ingresos, ticket,
   cxc, etc. `realLeads` (de `adspendView`) reemplaza `recs.length` como leads cuando hay dato real.
 - `sedeAgg(base)` → agrega por sede (+ divKey, salud-inputs, ticket); usa `sedeRealLeads` para el
-  campo `leads` real por sucursal cuando hay Facebook (ver §5c)
-- `divAgg(rows)` → subtotales por división
+  campo `leads` real por sucursal cuando hay Facebook (ver §5c); usa `sedeMetaInfo`/`enMesActual`
+  para meta/ritmo/déficit/proyección del mes (ver §8b)
+- `divAgg(rows)` → subtotales por división (incluye meta/proyección agregadas)
 - `salud(s)` → semáforo (score 0-100 + status + métrica más débil). Metas en `TARGETS`.
+- `monthCutoffInfo()` / `enMesActual(r,ci)` → corte compartido del mes en curso (hoy cuenta
+  completo), usado por `monthProjection` y por la meta de sucursal
 
 **Render (una función por bloque visual)**
 - `render()` → orquesta TODO. Se llama en cada cambio de filtro. Lee `selSedes(recsForCanal(canal))`.
@@ -351,6 +354,37 @@ status = score>=80 ? 'verde' : score>=55 ? 'amarillo' : 'rojo'
 ```
 
 Se usa en: focos rojos y punto/pastilla de semáforo en la tabla de sucursales.
+
+## 8b. Meta del mes por sucursal (tabla de Sucursales, agregado 2026-07-06)
+
+Pedido de Irvin: en la tabla de Sucursales, ver quién está más lejos de su meta, con un semáforo
+propio (distinto del semáforo de salud de `salud()`). Dos columnas nuevas junto a "Agendados":
+**Meta del mes** (`lleva/meta` + punto de semáforo) y **Proy. fin de mes**.
+
+La meta viene de `META DE PACIENTES` en `adspend.dat` (`metaForSede(sede)` — hoy solo Facebook la
+trae por sucursal; sedes sin ese dato muestran `—` en vez de un semáforo). La fórmula
+(`sedeMetaInfo` en dashboard_template.html):
+
+```
+ritmoNecesario = meta / díasDelMes
+esperadoHoy    = ritmoNecesario × díasTranscurridos   // lo que le tocaría llevar HOY, no la meta total
+lleva          = agendados de ESTE mes a la fecha (enMesActual) — no el historial completo
+déficit        = lleva − esperadoHoy                  // negativo = va atrasado respecto al ritmo
+ritmoActual    = lleva / díasTranscurridos
+proyección     = round(ritmoActual × díasDelMes)
+metaRatio      = lleva / esperadoHoy
+semáforo       = metaRatio>=1 ? verde : metaRatio>=0.8 ? amarillo : rojo
+```
+
+**Por qué el déficit es contra "lo esperado a hoy" y no contra la meta total:** así se ve quién va
+mal *ahora*, a mitad de mes, en vez de que todas las sucursales salgan "en déficit" simplemente
+porque aún no termina el mes. El detalle completo (ritmo necesario + déficit) sale en el `title`
+(tooltip) del punto de semáforo y del número, para no saturar la celda.
+
+Igual que en `monthProjection` (§5c), "hoy" cuenta completo (Irvin llena el Excel día a día, así
+que no se resta un día al corte). La fila TOTAL GENERAL y las filas de subtotal por división suman
+`meta`/`lleva` de sus sucursales y recalculan ritmo/proyección/semáforo sobre esa suma (no promedian
+los semáforos individuales).
 
 ## 9. Pestañas (6) — cada una es un `<section class="tabpanel" data-panel="X">`
 
@@ -397,8 +431,6 @@ Se usa en: focos rojos y punto/pastilla de semáforo en la tabla de sucursales.
 
 - **Comparativo mes vs mes** — cargar 2 Excels y mostrar flechas ↑↓ por sede/KPI.
 - **Modo presentación / pantalla completa** — para juntas con dirección.
-- **Metas y cumplimiento** — definir meta por sede/división y % de avance (ya existen `META DE
-  PACIENTES`/`META LEADS` en `adspend.dat` para Facebook, falta compararlas contra lo real).
 - **Heatmap sede × KPI**.
 - **Exportar a PDF ejecutivo** (one-pager).
 - **CAC/leads reales por sucursal en Promociones/Google/Orgánico** — el parser (`parseAggregateAdSheet`)
