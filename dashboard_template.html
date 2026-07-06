@@ -111,6 +111,15 @@ body{
 .reset{background:none;border:1px solid var(--line);color:var(--ink2);font-family:var(--body);font-size:12px;
   border-radius:9px;padding:8px 12px;cursor:pointer}
 .reset:hover{border-color:var(--line2);color:var(--ink)}
+.datef{display:flex;align-items:center;gap:6px}
+.datebtn{appearance:none;background:var(--bg2);border:1px solid var(--line);color:var(--ink2);
+  font-family:var(--body);font-weight:600;font-size:11.5px;border-radius:8px;padding:7px 11px;cursor:pointer;transition:all .15s}
+.datebtn:hover{border-color:var(--line2);color:var(--ink)}
+.datebtn.on{background:linear-gradient(180deg,var(--card2),var(--card));color:var(--ink);border-color:var(--teal)}
+.datebtn.ghost{padding:7px 9px;color:var(--dim)}
+.dinput{background:var(--bg2);border:1px solid var(--line);color:var(--ink);font-family:var(--mono);
+  font-size:11.5px;border-radius:9px;padding:7px 9px;color-scheme:dark}
+.dsep{font-family:var(--mono);font-size:10px;color:var(--dim)}
 
 /* ===== funnel hero ===== */
 .hero{
@@ -325,6 +334,17 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
 .padrow .pvv b{color:var(--ink);font-weight:700}
 .padrow .pvv i{font-style:normal}
 .pgb{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.3px;padding:2px 8px;border-radius:20px;white-space:nowrap}
+
+/* ===== plan diario ===== */
+.plandiario-rows{display:flex;flex-direction:column;gap:3px}
+.planrow{display:grid;grid-template-columns:96px 1fr auto;align-items:center;gap:12px;padding:4px 8px;border-radius:8px}
+.planrow:hover{background:rgba(255,255,255,.025)}
+.planrow.futuro{opacity:.55}
+.pdday{font-family:var(--mono);font-size:11px;color:var(--ink2);text-transform:capitalize}
+.pdvv{font-family:var(--mono);font-size:11px;color:var(--ink2);white-space:nowrap;text-align:right;min-width:150px;display:flex;align-items:center;justify-content:flex-end;gap:7px}
+.pdvv b{color:var(--ink);font-weight:700}
+.pdvv i{font-style:normal;color:var(--dim)}
+@media(max-width:720px){ .planrow{grid-template-columns:76px 1fr auto} .pdvv{min-width:0} }
 .pgb .gd{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;opacity:.85}
 .padtag{display:inline-flex;align-items:center;gap:8px;background:rgba(25,194,168,.12);border:1px solid rgba(25,194,168,.34);color:#9CEEDD;font-family:var(--body);font-size:11.5px;font-weight:600;border-radius:20px;padding:4px 7px 4px 12px;margin-left:2px}
 .padtag button{appearance:none;border:none;background:rgba(255,255,255,.08);color:#9CEEDD;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;display:grid;place-items:center}
@@ -500,6 +520,17 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
       </div>
     </div>
     <div class="fl">
+      <label>Fecha</label>
+      <div class="datef">
+        <button type="button" class="datebtn" id="dateHoyBtn">Hoy</button>
+        <button type="button" class="datebtn" id="dateAyerBtn">Ayer</button>
+        <input type="date" class="dinput" id="dateFrom" title="Desde">
+        <span class="dsep">a</span>
+        <input type="date" class="dinput" id="dateTo" title="Hasta">
+        <button type="button" class="datebtn ghost" id="dateClearBtn" title="Quitar filtro de fecha">✕</button>
+      </div>
+    </div>
+    <div class="fl">
       <label for="srch">Buscar</label>
       <input class="srch" id="srch" type="text" placeholder="Nombre o teléfono…" autocomplete="off">
     </div>
@@ -514,6 +545,7 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
     <button class="tab on" data-tab="resumen"><svg viewBox="0 0 24 24" fill="none"><path d="M3 3h7v7H3zM14 3h7v4h-7zM14 11h7v10h-7zM3 14h7v7H3z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>Resumen</button>
     <button class="tab" data-tab="ranking"><svg viewBox="0 0 24 24" fill="none"><path d="M3 21h4v-7H3zM10 21h4V9h-4zM17 21h4V4h-4z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Ranking</button>
     <button class="tab" data-tab="presupuesto"><svg viewBox="0 0 24 24" fill="none"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Presupuesto</button>
+    <button class="tab" data-tab="plandiario"><svg viewBox="0 0 24 24" fill="none"><path d="M3 3v18h18M7 14l4-4 3 3 5-6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Plan diario</button>
     <button class="tab" data-tab="sucursales"><svg viewBox="0 0 24 24" fill="none"><path d="M3 21h18M5 21V7l8-4 8 4v14M9 9h0M9 13h0M9 17h0M15 9h0M15 13h0M15 17h0" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Sucursales <span class="tcount" id="tc-sed">0</span></button>
     <button class="tab" data-tab="padecimientos"><svg viewBox="0 0 24 24" fill="none"><path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Padecimientos <span class="tcount" id="tc-pad">0</span></button>
     <button class="tab" data-tab="pacientes"><svg viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Pacientes <span class="tcount" id="tc-pac">0</span></button>
@@ -659,6 +691,15 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
       <span class="hint" id="proyHint"></span>
     </div>
     <div class="kgrid" id="proyeccionKgrid"></div>
+  </section>
+
+  <!-- TAB: PLAN DIARIO -->
+  <section class="tabpanel" data-panel="plandiario">
+    <div class="th-bar">
+      <h3>Plan diario por división</h3>
+      <span class="hint">Citas agendadas por día vs lo planeado (hoja "Proyecciones") · para ver qué día hay que apretar más y no bajar el ritmo</span>
+    </div>
+    <div id="planDiarioBody"></div>
   </section>
 
   <!-- TAB: SUCURSALES -->
@@ -820,7 +861,7 @@ function asISO(v){
 let RECORDS = RAW_RECORDS.slice();
 let CHANNELS_MIRROR = []; // channels that mirror Facebook
 const state = { canal:'TODOS', sedes:new Set(), search:'', chip:'todos', padFilter:null,
-  sedeSort:{k:'n',dir:-1}, patSort:{k:'fecha',dir:-1}, padSort:{k:'n',dir:-1} };
+  sedeSort:{k:'n',dir:-1}, patSort:{k:'fecha',dir:-1}, padSort:{k:'n',dir:-1}, dateFrom:null, dateTo:null };
 
 /* ---------- sede tiers ---------- */
 const TIERS = [
@@ -877,8 +918,27 @@ function annotatePad(records){ for(const r of records){ r.padGrp = padGroupKey(r
 function hexA(hex,a){ const h=hex.replace('#',''); const n=parseInt(h,16);
   return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; }
 
-/* ---------- sede selection helper ---------- */
-function selSedes(recs){ return state.sedes.size===0 ? recs : recs.filter(r=>state.sedes.has(r.sede)); }
+/* ---------- sede selection helper ----------
+   También aplica el filtro de fecha (hoy/ayer/rango) — todos los renderX(base) ya llaman
+   selSedes(base) internamente, así que este es el único choke-point para que ambos filtros
+   (sede + fecha) apliquen parejo en todo el dashboard sin tocar cada render por separado. */
+function selSedes(recs){
+  let out = state.sedes.size===0 ? recs : recs.filter(r=>state.sedes.has(r.sede));
+  if(state.dateFrom || state.dateTo){
+    const from=state.dateFrom||'0000-00-00', to=state.dateTo||'9999-99-99';
+    out = out.filter(r=>r.fecha && r.fecha>=from && r.fecha<=to);
+  }
+  return out;
+}
+function isoToday(offsetDays){ offsetDays=offsetDays||0; const d=new Date(); d.setDate(d.getDate()+offsetDays);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function syncDateUI(){
+  $('dateFrom').value=state.dateFrom||''; $('dateTo').value=state.dateTo||'';
+  const hoy=isoToday(0), ayer=isoToday(-1);
+  $('dateHoyBtn').classList.toggle('on', state.dateFrom===hoy && state.dateTo===hoy);
+  $('dateAyerBtn').classList.toggle('on', state.dateFrom===ayer && state.dateTo===ayer);
+}
+function setDateRange(from,to){ state.dateFrom=from; state.dateTo=to; syncDateUI(); render(); }
 
 /* ---------- leads / agendados desde el Excel ----------
    Cada fila del Excel es un LEAD. AGENDADO = fila que tiene fecha de cita.
@@ -994,6 +1054,9 @@ function render(){
 
   // presupuesto / CAC / proyección de cierre de mes
   renderPresupuesto(recs, k, av);
+
+  // plan diario (siempre con todos los registros, ver renderPlanDiario)
+  renderPlanDiario();
 }
 
 /* funnel block (también usado por la actualización en vivo de Leads) */
@@ -1613,7 +1676,15 @@ $('padTbody').addEventListener('click',e=>{ const r=e.target.closest('[data-pad]
 $('padTag').addEventListener('click',e=>{ if(e.target.closest('#padTagX')){ state.padFilter=null;
   renderPad(recsForCanal(state.canal)); renderPatients(recsForCanal(state.canal)); } });
 
+/* filtro de fecha: hoy / ayer / rango personalizado */
+$('dateHoyBtn').addEventListener('click',()=>{ const h=isoToday(0); setDateRange(h,h); });
+$('dateAyerBtn').addEventListener('click',()=>{ const a=isoToday(-1); setDateRange(a,a); });
+$('dateClearBtn').addEventListener('click',()=>setDateRange(null,null));
+$('dateFrom').addEventListener('change',e=>setDateRange(e.target.value||null,state.dateTo));
+$('dateTo').addEventListener('change',e=>setDateRange(state.dateFrom,e.target.value||null));
+
 $('btnReset').addEventListener('click',()=>{ state.canal='TODOS'; state.sedes.clear(); state.search=''; state.chip='todos'; state.padFilter=null;
+  state.dateFrom=null; state.dateTo=null; syncDateUI();
   $('srch').value=''; [...$('segCanal').children].forEach((x,i)=>x.classList.toggle('on',i===0));
   [...$('chips').children].forEach((x,i)=>x.classList.toggle('on',i===0));
   openMsel(false); syncSedeUI(); render(); });
@@ -1764,6 +1835,33 @@ function parseAggregateAdSheetBrowser(rows){
     if(ci.gastado>=0&&isNumV(row[ci.gastado])) totals.gastado+=row[ci.gastado]; }
   return totals;
 }
+/* hoja "PROYECCIONES": PivotTable pegado (bloques por división) con citas agendadas por sucursal y
+   día del mes — ver comentario de parseProyecciones en excel_to_dat.js (misma lógica exacta) */
+function parseProyeccionesBrowser(rows){
+  const result={}; let i=0;
+  while(i<rows.length){
+    const row=rows[i]||[];
+    const label=row[0]!=null?String(row[0]).trim().toUpperCase():'';
+    const isDivHeader=label && row.slice(1).every(c=>c==null) &&
+      rows[i+1] && String((rows[i+1][0])||'').toUpperCase().includes('CUENTA DE');
+    if(!isDivHeader){ i++; continue; }
+    const divKey=label.includes('TERCERIZADA')?'TERCERIZADAS':label.includes('FRANQUICIA')?'FRANQUICIAS':label.includes('CORPORATIVO')?'CORPORATIVO':label;
+    const headRow=rows[i+2]||[];
+    const dayCols=[];
+    for(let c=1;c<headRow.length;c++){ if(isNumV(headRow[c])) dayCols.push({col:c,day:headRow[c]}); }
+    result[divKey]=result[divKey]||{};
+    let j=i+3;
+    while(j<rows.length && rows[j][0]!=null && String(rows[j][0]).trim().toUpperCase()!=='TOTAL GENERAL'){
+      const sede=normSede(rows[j][0]);
+      const byDay=result[divKey][sede]||{};
+      for(const {col,day} of dayCols){ if(isNumV(rows[j][col])) byDay[day]=(byDay[day]||0)+rows[j][col]; }
+      result[divKey][sede]=byDay;
+      j++;
+    }
+    i=j+1;
+  }
+  return result;
+}
 function extractAdSpendBrowser(wb){
   const sheetRows=(name)=>{ const sh=wb.Sheets[name]; return sh?XLSX.utils.sheet_to_json(sh,{header:1,defval:null,raw:true,blankrows:false}):[]; };
   const facebookBySede=parseFacebookAdSheetBrowser(sheetRows('FACEBOOK'));
@@ -1773,7 +1871,8 @@ function extractAdSpendBrowser(wb){
     PROMOCIONES:{total:parseAggregateAdSheetBrowser(sheetRows('PROMOCIONES'))},
     GOOGLE:{total:parseAggregateAdSheetBrowser(sheetRows('GOOGLE'))},
     ORGANICO:{total:parseAggregateAdSheetBrowser(sheetRows('ORGANICO'))},
-    GERONTOLOGIA:{total:parseAggregateAdSheetBrowser(sheetRows('GERONTOLOGIA'))} };
+    GERONTOLOGIA:{total:parseAggregateAdSheetBrowser(sheetRows('GERONTOLOGIA'))},
+    PLAN_DIARIO:parseProyeccionesBrowser(sheetRows('PROYECCIONES')) };
 }
 
 /* ---------- clock ---------- */
@@ -1808,6 +1907,61 @@ function renderRanking(recs){
   setTimeout(()=>{ document.querySelectorAll('[data-panel="ranking"] .rankfill').forEach(el=>{ el.style.width=el.dataset.w+'%'; }); },40);
 }
 
+/* ---------- plan diario (hoja "Proyecciones", ver AGENTS.md §5e) ----------
+   Siempre usa TODOS los registros (RECORDS), sin importar el filtro de canal/sede activo — es una
+   herramienta de planeación operativa día a día, no una vista analítica filtrada. "Planeado" viene
+   de ADSPEND.PLAN_DIARIO (lo que Irvin ya tiene agendado, pegado como PivotTable); "real" se calcula
+   siempre en vivo desde RECORDS (más confiable que confiar en el pivot estático de Irvin, que puede
+   quedar un poco desfasado si sigue capturando pacientes después de armar el pivot). */
+function renderPlanDiario(){
+  const el=$('planDiarioBody'); if(!el) return;
+  const plan=ADSPEND.PLAN_DIARIO;
+  if(!plan || !Object.keys(plan).length){ el.innerHTML='<div class="empty">Todavía no hay hoja "Proyecciones" en el Excel.</div>'; return; }
+  const ci=monthCutoffInfo();
+  const realMap={};
+  for(const r of RECORDS){ if(!r.fecha) continue;
+    const d=new Date(r.fecha+'T00:00:00');
+    if(d.getFullYear()!==ci.y || d.getMonth()!==ci.m) continue;
+    const day=d.getDate();
+    (realMap[r.sede]=realMap[r.sede]||{})[day]=(realMap[r.sede][day]||0)+1;
+  }
+  const order=['CORPORATIVO','FRANQUICIAS','TERCERIZADAS'];
+  const labelOf={CORPORATIVO:'Corporativo',FRANQUICIAS:'Franquicias',TERCERIZADAS:'Tercerizadas'};
+  let html='';
+  for(const divKey of order){
+    const sedes=plan[divKey]; if(!sedes) continue;
+    const color=divColor(divKey);
+    const daySet=new Set();
+    for(const sede in sedes){ for(const day in sedes[sede]) daySet.add(+day); }
+    const days=[...daySet].sort((a,b)=>a-b);
+    let sumPlanHoy=0, sumRealHoy=0;
+    const rowsHtml=days.map(day=>{
+      let planeado=0, real=0;
+      for(const sede in sedes){ planeado+=sedes[sede][day]||0; real+=(realMap[sede]&&realMap[sede][day])||0; }
+      const esFuturo=day>ci.diasTranscurridos;
+      if(!esFuturo){ sumPlanHoy+=planeado; sumRealHoy+=real; }
+      const ratio=planeado?real/planeado:(real>0?1:0);
+      const status=esFuturo?null:(ratio>=1?'verde':(ratio>=0.8?'amarillo':'rojo'));
+      const maxV=Math.max(planeado,real,1);
+      return `<div class="planrow${esFuturo?' futuro':''}">
+        <span class="pdday">Día ${day}</span>
+        <div class="ptrack">
+          <div class="pfill tot" style="width:${(planeado/maxV*100).toFixed(1)}%;background:${color};opacity:.35"></div>
+          ${!esFuturo?`<div class="pfill asis" style="width:${(real/maxV*100).toFixed(1)}%;background:${color}"></div>`:''}
+        </div>
+        <span class="pdvv">${esFuturo?`<i>${planeado} agendadas</i>`:`<b>${real}</b>/${planeado}`}${status?` <span class="smfdot ${status}"></span>`:''}</span>
+      </div>`;
+    }).join('');
+    const deficit=sumRealHoy-sumPlanHoy;
+    html += `<div class="panel-c" style="margin-bottom:16px">
+      <div class="ph"><h3><span class="ddot" style="background:${color};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:8px"></span>${labelOf[divKey]}</h3>
+        <small>hasta hoy: <b>${sumRealHoy}</b> reales de <b>${sumPlanHoy}</b> planeadas (${deficit>=0?'+':''}${deficit})</small></div>
+      <div class="plandiario-rows">${rowsHtml || '<div class="empty">Sin días con datos.</div>'}</div>
+    </div>`;
+  }
+  el.innerHTML = html || '<div class="empty">Sin datos para esta vista.</div>';
+}
+
 /* ---------- tilt 3D en tarjetas KPI ---------- */
 (function(){ const kg=document.getElementById('kgrid'); if(!kg) return;
   kg.addEventListener('mousemove',e=>{ const c=e.target.closest('.kpi'); 
@@ -1821,6 +1975,7 @@ function renderRanking(recs){
 /* ---------- boot ---------- */
 annotatePad(RECORDS);
 buildSedeControl();
+syncDateUI();
 render();
 </script>
 </body>

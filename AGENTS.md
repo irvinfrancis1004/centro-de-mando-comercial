@@ -280,6 +280,68 @@ registro con `servicio` (o sea, para Facebook/Promociones/Google/Orgánico no ap
 `adspendView`'s lista de canales para Consolidado. El resto (KPIs, embudo, Ranking, Sucursales)
 lo toma solo porque son genéricos sobre `state.canal`/`recsForCanal` — no necesitaron cambios.
 
+## 5e. Plan diario (hoja "Proyecciones", pestaña "Plan diario", agregado 2026-07-06)
+
+Irvin pega en el Excel un **PivotTable de Excel tal cual** (hoja `PROYECCIONES`) con las citas que
+ya tiene agendadas por sucursal y día del mes, en 3 bloques por división (`CORPORATIVO`,
+`FRANQUICIAS`, `FRANQUICIAS TERCERIZADAS` → se normaliza a `TERCERIZADAS`). Esto le sirve a Irvin
+para ver qué día tiene que "apretar más" para no bajar el ritmo mensual.
+
+**Formato del PivotTable (no es una tabla limpia, ojo al tocar el parser):**
+```
+fila 0: nombre de la división sola en columna A (ej. "CORPORATIVO")
+fila 1: "Cuenta de Nombre" | "Etiquetas de columna"     <- boilerplate del pivot, se ignora
+fila 2: "Etiquetas de fila" | día | día | ... | "Total general"  <- el día REAL de cada columna
+filas N: sucursal | cantidad por día | ...
+fila final: "Total general" | subtotal por día | ...
+```
+**Los días de la fila 2 NO son consecutivos** — si ningún registro cayó en un día para NINGUNA
+sucursal del bloque, Excel quita esa columna del pivot entero (ver bloque TERCERIZADAS del archivo
+real: salta del día 4 al 6 porque el día 5 no tuvo citas en ninguna de esas 5 sucursales). El parser
+(`parseProyecciones` en excel_to_dat.js, `parseProyeccionesBrowser` en dashboard_template.html —
+misma lógica exacta, mantener en sync) lee el día real de cada columna en vez de asumir 1..N.
+
+Resultado guardado en `adspend.dat` como `PLAN_DIARIO`:
+```
+{ CORPORATIVO: { BALBUENA: {1:2, 2:3, ...}, CHALCO: {...}, ... }, FRANQUICIAS: {...}, TERCERIZADAS: {...} }
+```
+
+**Pestaña "Plan diario"** (`renderPlanDiario()`): por cada división, una fila por día (unión de
+todos los días presentes en cualquier sucursal de esa división), mostrando planeado vs real:
+
+- **"Real" se calcula siempre en vivo desde `RECORDS`** (agrupando por `fecha` del mes/año actual),
+  **no** se confía en los totales del pivot de Irvin — su pivot es una foto de un momento dado y
+  puede quedar desfasado si sigue capturando pacientes después de pegarlo (se verificó con datos
+  reales: para Chalco día 2 el pivot decía 16, `RECORDS` decía 14 — la diferencia es real, no un
+  bug del parser).
+- **Días futuros** (`día > díasTranscurridos` de `monthCutoffInfo()`) no llevan semáforo ni
+  comparación — solo se informa cuántas ya están agendadas para ese día (no tiene sentido decir que
+  "van atrasados" en un día que no ha pasado).
+- **Semáforo por día:** `real/planeado >= 1` verde, `>= 0.8` amarillo, si no rojo — mismo criterio
+  que la meta mensual de sucursal (§8b), por consistencia.
+- Esta pestaña **ignora el filtro global de canal/sede** a propósito — es una herramienta de
+  planeación operativa (todas las sucursales, todos los canales), no una vista analítica filtrada.
+  Si se necesita filtrar por sede en el futuro, avisar antes de asumir que ya se puede.
+
+## 5f. Filtro de fecha (Hoy / Ayer / rango personalizado, agregado 2026-07-06)
+
+Pedido de Irvin: poder ver "cuántos acudieron" en un día específico o rango, sin tener que mirar
+toda la base. Filtra por `fecha` (fecha de la CITA, no `dia` de captura) — mismo campo que usa
+`hasCita`/`agendCount` en todo el dashboard.
+
+`state.dateFrom`/`state.dateTo` (strings ISO `YYYY-MM-DD` o `null`). Se aplica dentro de
+**`selSedes(recs)`** (no en una función aparte) — a propósito, porque casi todos los `renderX(base)`
+ya llaman `selSedes(base)` internamente (`renderFocos`, `renderSede`, `renderPatients`, `renderPad`,
+`renderServicio`, y el `recs` de `render()`); meter el filtro ahí es el único choke-point que lo
+aplica parejo en todo el dashboard sin tocar cada `renderX` por separado. Si se agrega un nuevo
+bloque visual que necesite `base` filtrado, usar `selSedes(base)` y ya hereda el filtro de fecha
+gratis — no filtrar por fecha a mano en otro lado.
+
+Controles en la barra de filtros: botones **Hoy**/**Ayer** (ponen `dateFrom=dateTo=` esa fecha) +
+2 `<input type="date">` para rango personalizado + botón **✕** para quitar el filtro. `btnReset`
+("Limpiar filtros") también lo resetea. `renderPlanDiario()` es la única vista que **no** pasa por
+`selSedes` (ver §5e) y por lo tanto ignora este filtro también, a propósito.
+
 ## 6. Divisiones (tiers) — array `TIERS`
 
 - **CORPORATIVO** (#19C2A8): BALBUENA, CHALCO, ECATEPEC, NEZA, PLAZA NEZA, MILPA ALTA, MIXQUIAHUALA, TLAHUAC, COACALCO
@@ -334,11 +396,13 @@ Todo el JS está en el único `<script>` del final. Funciones clave:
 - `renderRanking(recs)` + `rankBarsHtml(rows,valueKey,fmt)` (5 comparativas por sucursal —
   iniciales/agendados, % asistencia, % conversión, % cierre, cuenta por cobrar — coloreadas por
   división. Reemplazó al mapa 3D, ver §11)
+- `renderPlanDiario()` (planeado vs real por día y división, vía `ADSPEND.PLAN_DIARIO`; ver §5e)
 
 **Controles**
 - `buildSedeControl` / `syncSedeUI` / `setSedeFilter` (multi-select de sedes + botones de tier)
 - `setTab(t)` + handler de `#tabbar` (navegación por pestañas)
-- `state` = objeto global de estado: `{canal, sedes:Set, search, chip, padFilter, sedeSort, patSort, padSort}`
+- `setDateRange(from,to)` / `syncDateUI()` / `isoToday(offsetDays)` (filtro Hoy/Ayer/rango, ver §5f)
+- `state` = objeto global de estado: `{canal, sedes:Set, search, chip, padFilter, sedeSort, patSort, padSort, dateFrom, dateTo}`
 
 **Efectos**
 - Tilt 3D de tarjetas KPI: IIFE con listener `mousemove` sobre `#kgrid`.
@@ -388,15 +452,17 @@ que no se resta un día al corte). La fila TOTAL GENERAL y las filas de subtotal
 `meta`/`lleva` de sus sucursales y recalculan ritmo/proyección/semáforo sobre esa suma (no promedian
 los semáforos individuales).
 
-## 9. Pestañas (6) — cada una es un `<section class="tabpanel" data-panel="X">`
+## 9. Pestañas (7) — cada una es un `<section class="tabpanel" data-panel="X">`
 
-1. **resumen** — focos rojos + embudo + KPIs (con tilt 3D) + gráficas (barras + dona)
+1. **resumen** — focos rojos + embudo + KPIs (con tilt 3D) + gráficas (barras + dona) + panel
+   "Por servicio" (condicional, ver §5d)
 2. **ranking** — 5 comparativas por sucursal (iniciales, % asistencia, % conversión, % cierre,
    cuenta por cobrar), coloreadas por división. Reemplazó al mapa 3D (ver §11).
 3. **presupuesto** — leads reales/gasto/CPL/CAC (via `adspend.dat`, ver §5c) + proyección de cierre de mes
-4. **sucursales** — tabla agrupada por división, subtotales, TOTAL GENERAL, semáforo
-5. **padecimientos** — clasificador + tarjetas + barras + tabla; clic filtra la base y salta a Pacientes
-6. **pacientes** — base completa, chips (plan/no asistió/pendiente/cxc), búsqueda, color por división
+4. **plandiario** — planeado vs real por día, por división (hoja "Proyecciones", ver §5e)
+5. **sucursales** — tabla agrupada por división, subtotales, TOTAL GENERAL, semáforo, meta del mes (§8b)
+6. **padecimientos** — clasificador + tarjetas + barras + tabla; clic filtra la base y salta a Pacientes
+7. **pacientes** — base completa, chips (plan/no asistió/pendiente/cxc), búsqueda, color por división
 
 > El simulador de impacto se removió (petición de Irvin, 2026-07-01). Si se vuelve a pedir, revisar
 > el historial de `dashboard_template.html` para recuperar `SIM`, `simBaseline`, `projFunnel`,

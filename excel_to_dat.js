@@ -320,6 +320,44 @@ function parseAggregateAdSheet(rows) {
   return totals;
 }
 
+/** Hoja "PROYECCIONES" (agregada 2026-07-06): un PivotTable de Excel pegado tal cual, con un bloque
+ *  por división (CORPORATIVO / FRANQUICIAS / FRANQUICIAS TERCERIZADAS) — citas agendadas por
+ *  sucursal y día del mes ("las citas que tengo agendadas cada día", para ver qué día hay que
+ *  apretar más). Estructura de cada bloque:
+ *    fila 0: nombre de la división sola en col A
+ *    fila 1: "Cuenta de Nombre" | "Etiquetas de columna"  (boilerplate del pivot, se ignora)
+ *    fila 2: "Etiquetas de fila" | día | día | ... | "Total general"  (el día real, NO asumir 1..N
+ *            consecutivo: si un día no tuvo citas en NINGUNA sucursal, Excel quita esa columna)
+ *    filas siguientes: sucursal | cantidad por día | ...
+ *    fila final del bloque: "Total general" | subtotal por día | ...
+ *  Devuelve { CORPORATIVO: { BALBUENA: {1:2,2:3,...}, ... }, FRANQUICIAS: {...}, TERCERIZADAS: {...} } */
+function parseProyecciones(rows) {
+  const result = {};
+  let i = 0;
+  while (i < rows.length) {
+    const row = rows[i] || [];
+    const label = row[0] != null ? String(row[0]).trim().toUpperCase() : '';
+    const isDivHeader = label && row.slice(1).every(c => c == null) &&
+      rows[i + 1] && String((rows[i + 1][0]) || '').toUpperCase().includes('CUENTA DE');
+    if (!isDivHeader) { i++; continue; }
+    const divKey = label.includes('TERCERIZADA') ? 'TERCERIZADAS' : label.includes('FRANQUICIA') ? 'FRANQUICIAS' : label.includes('CORPORATIVO') ? 'CORPORATIVO' : label;
+    const headRow = rows[i + 2] || [];
+    const dayCols = [];
+    for (let c = 1; c < headRow.length; c++) { if (isNum(headRow[c])) dayCols.push({ col: c, day: headRow[c] }); }
+    result[divKey] = result[divKey] || {};
+    let j = i + 3;
+    while (j < rows.length && rows[j][0] != null && String(rows[j][0]).trim().toUpperCase() !== 'TOTAL GENERAL') {
+      const sede = normSede(rows[j][0]);
+      const byDay = result[divKey][sede] || {};
+      for (const { col, day } of dayCols) { if (isNum(rows[j][col])) byDay[day] = (byDay[day] || 0) + rows[j][col]; }
+      result[divKey][sede] = byDay;
+      j++;
+    }
+    i = j + 1; // saltar también la fila "Total general" del bloque
+  }
+  return result;
+}
+
 function extractAdSpend(wb) {
   const sheetRows = (name) => {
     const sh = wb.Sheets[name];
@@ -337,6 +375,7 @@ function extractAdSpend(wb) {
     GOOGLE: { total: parseAggregateAdSheet(sheetRows('GOOGLE')) },
     ORGANICO: { total: parseAggregateAdSheet(sheetRows('ORGANICO')) },
     GERONTOLOGIA: { total: parseAggregateAdSheet(sheetRows('GERONTOLOGIA')) },
+    PLAN_DIARIO: parseProyecciones(sheetRows('PROYECCIONES')),
   };
 }
 
