@@ -368,7 +368,9 @@ trae por sucursal; sedes sin ese dato muestran `—` en vez de un semáforo). La
 ```
 ritmoNecesario = meta / díasDelMes
 esperadoHoy    = ritmoNecesario × díasTranscurridos   // lo que le tocaría llevar HOY, no la meta total
-lleva          = agendados de ESTE mes a la fecha (enMesActual) — no el historial completo
+lleva          = pacientes de ESTE mes a la fecha (enMesActual) que asiste==='SI' Y costo_pago>0
+                 — o sea, asistieron Y pagaron su consulta inicial. Regla explícita de Irvin
+                 (2026-07-06): agendados/efectivos que no pagaron no cuentan para la meta.
 déficit        = lleva − esperadoHoy                  // negativo = va atrasado respecto al ritmo
 ritmoActual    = lleva / díasTranscurridos
 proyección     = round(ritmoActual × díasDelMes)
