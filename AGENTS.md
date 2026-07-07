@@ -276,9 +276,17 @@ panel **"Por servicio"** en la pestaña Resumen (reutiliza el CSS `.padrow`/`.pt
 Padecimientos); el panel se **oculta solo** (`display:none`) si la vista actual no tiene ningún
 registro con `servicio` (o sea, para Facebook/Promociones/Google/Orgánico no aparece).
 
-`GERONTOLOGIA` se agregó también a: `segCanal` (botón + `--c-geronto`), `detectMirrors`,
-`adspendView`'s lista de canales para Consolidado. El resto (KPIs, embudo, Ranking, Sucursales)
-lo toma solo porque son genéricos sobre `state.canal`/`recsForCanal` — no necesitaron cambios.
+`GERONTOLOGIA` se agregó también a: `segCanal` (botón + `--c-geronto`), `detectMirrors`. El resto
+(KPIs, embudo, Ranking, Sucursales) lo toma solo porque son genéricos sobre
+`state.canal`/`recsForCanal` — no necesitaron cambios.
+
+> **Excluido de Consolidado a propósito (2026-07-07):** Irvin pidió que Gerontología "quede muy
+> aparte" — es una línea de servicio distinta, no un canal de mercadotecnia, y no debe mezclarse con
+> el embudo Leads→Agendados→Efectivos→Planes del resto. `recsForCanal('TODOS')` la excluye
+> explícitamente (`r.canal!=='GERONTOLOGIA' && (...)`), y `adspendView('TODOS',...)` no la incluye en
+> su lista de canales. Solo se ve seleccionando el botón "Gerontología" directamente — nunca aparece
+> mezclada en Consolidado. Si se agrega otro canal "aparte" en el futuro, seguir este mismo patrón
+> (excluirlo en ambos lugares) en vez de agregarlo a las listas de Consolidado.
 
 ## 5e. Plan diario (hoja "Proyecciones", pestaña "Plan diario", agregado 2026-07-06)
 

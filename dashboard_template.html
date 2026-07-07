@@ -956,9 +956,11 @@ function divColor(key){ const t=tierByKey(key); return t?t.color:'#7F97A2'; }
 function recsForCanal(canal){
   if(canal!=='TODOS') return RECORDS.filter(r=>r.canal===canal);
   // Consolidado: Facebook + cualquier canal que NO sea copia exacta de Facebook,
-  // para no contar dos/tres veces las bases espejeadas.
+  // para no contar dos/tres veces las bases espejeadas. GERONTOLOGIA se excluye a propósito
+  // (petición de Irvin, 2026-07-07): es una línea de servicio aparte, no un canal de mercadotecnia,
+  // y no debe mezclarse con el embudo Leads→Agendados→Efectivos→Planes del Consolidado.
   if(!CHANNELS_MIRROR || !CHANNELS_MIRROR.length) detectMirrors();
-  return RECORDS.filter(r=> r.canal==='FACEBOOK' || !CHANNELS_MIRROR.includes(r.canal));
+  return RECORDS.filter(r=> r.canal!=='GERONTOLOGIA' && (r.canal==='FACEBOOK' || !CHANNELS_MIRROR.includes(r.canal)));
 }
 function detectMirrors(){
   const byCanal={};
@@ -1117,7 +1119,8 @@ function renderKpis(k){
 let ADSPEND = (typeof RAW_ADSPEND!=='undefined' && RAW_ADSPEND) ? RAW_ADSPEND : {};
 const MONEY0=new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:0});
 function adspendView(canal,sedeSet){
-  const canales = canal==='TODOS' ? ['FACEBOOK','PROMOCIONES','GOOGLE','ORGANICO','GERONTOLOGIA'] : [canal];
+  // GERONTOLOGIA no entra en Consolidado a propósito (ver recsForCanal) — queda aparte
+  const canales = canal==='TODOS' ? ['FACEBOOK','PROMOCIONES','GOOGLE','ORGANICO'] : [canal];
   let leads=0, gastado=0, bySedeAvailable=false;
   for(const c of canales){
     const ch=ADSPEND[c]; if(!ch) continue;
