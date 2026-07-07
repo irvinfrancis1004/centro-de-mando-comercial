@@ -687,6 +687,12 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
     <div class="kgrid" id="presupuestoKgrid"></div>
 
     <div class="th-bar" style="margin-top:28px">
+      <h3>Leads reales de Facebook por división</h3>
+      <span class="hint">Corporativo · Franquicias · Tercerizadas — sumando el desglose por sucursal (solo Facebook lo trae)</span>
+    </div>
+    <div class="rankcard"><div id="leadsDivBars"></div></div>
+
+    <div class="th-bar" style="margin-top:28px">
       <h3>Proyección de cierre de mes</h3>
       <span class="hint" id="proyHint"></span>
     </div>
@@ -1130,12 +1136,13 @@ function adspendView(canal,sedeSet){
       const keys = sedeFiltrado ? [...sedeSet] : Object.keys(ch.bySede);
       for(const s of keys){ const v=ch.bySede[s]; if(v){ leads+=v.leads; gastado+=v.gastado; } }
     } else if(ch.total){
-      // PROMOCIONES/GOOGLE/ORGANICO son agregados de TODA la red, sin desglose por sucursal.
-      // Si hay un filtro de sede activo no se pueden sumar aquí (no sabemos qué parte es de esa
-      // sucursal) — sumarlos igual infla el número (bug real: Ajusco mostraba 1002 en vez de 119,
-      // porque se sumaban los totales de red completos encima del dato real de Facebook). Se
-      // omiten y se avisa con `omitido` para que la UI aclare que faltan esos canales en la vista.
-      if(sedeFiltrado){ omitido=true; continue; }
+      // PROMOCIONES/GOOGLE/ORGANICO son agregados de TODA la red, sin desglose por sucursal —
+      // no hay forma de saber qué parte le toca a una sucursal filtrada. Aun así, Irvin pidió
+      // explícitamente (2026-07-07) que SÍ se sumen completos en Consolidado aunque haya un
+      // filtro de sede activo — prefiere ver el total con esa imprecisión conocida a no verlo.
+      // `omitido` se deja calculado (sin usarse para restar nada) por si se necesita mostrar
+      // el aviso en el futuro sin tener que recalcular esta lógica.
+      if(sedeFiltrado) omitido=true;
       leads+=ch.total.leads; gastado+=ch.total.gastado;
     }
   }
@@ -1166,11 +1173,26 @@ function monthProjection(recs){
   return { cutoff:ci.cutoff, diasTranscurridos, diasDelMes,
     agendados:mk(citasMes.length), efectivos:mk(efectivosMes), planes:mk(planesMes) };
 }
+/** Leads reales de Facebook agrupados por división (Corporativo/Franquicias/Tercerizadas) —
+ *  pedido por Irvin (2026-07-07). Solo Facebook trae desglose por sucursal en adspend.dat, así que
+ *  es la única fuente posible para esto; se suma vía TIERS/tierOf, sin importar canal/sede activos
+ *  (panel de referencia fijo, igual que Plan diario). */
+function renderLeadsPorDivision(){
+  if(!$('leadsDivBars')) return;
+  const fb=ADSPEND.FACEBOOK;
+  const totals={CORPORATIVO:0,FRANQUICIAS:0,TERCERIZADAS:0,OTRAS:0};
+  if(fb && fb.bySede){ for(const sede in fb.bySede){ const t=tierOf(sede); const key=t?t.key:'OTRAS'; totals[key]+=fb.bySede[sede].leads||0; } }
+  const labelOf={CORPORATIVO:'Corporativo',FRANQUICIAS:'Franquicias',TERCERIZADAS:'Tercerizadas',OTRAS:'Otras / sin grupo'};
+  const rows=Object.keys(totals).filter(k=>totals[k]>0 || k!=='OTRAS').map(key=>({sede:labelOf[key],divColor:divColor(key),leads:totals[key]}));
+  $('leadsDivBars').innerHTML=rankBarsHtml(rows,'leads',asInt);
+  setTimeout(()=>{ document.querySelectorAll('#leadsDivBars .rankfill').forEach(el=>{ el.style.width=el.dataset.w+'%'; }); },40);
+}
 function renderPresupuesto(recs,k,av){
   if(!$('presupuestoKgrid')) return;
   av = av || adspendView(state.canal,state.sedes);
+  renderLeadsPorDivision();
   if($('presupuestoHint')) $('presupuestoHint').innerHTML = av.omitido
-    ? 'Leads reales y gasto por canal, tomados de las hojas de pauta del Excel · hoy solo Facebook trae desglose por sucursal · <b style="color:var(--amber)">con sede filtrada, Promociones/Google/Orgánico no se suman aquí (son agregados de toda la red, no de esta sucursal)</b>'
+    ? 'Leads reales y gasto por canal, tomados de las hojas de pauta del Excel · hoy solo Facebook trae desglose por sucursal · <b style="color:var(--amber)">con sede filtrada, Promociones/Google/Orgánico igual suman su total completo de toda la red (no tienen desglose por sucursal)</b>'
     : 'Leads reales y gasto por canal, tomados de las hojas de pauta del Excel · hoy solo Facebook trae desglose por sucursal';
   const agendReal = av.leads? k.agendados/av.leads : 0;
   const efctSobreLeads = av.leads? k.efectivos/av.leads : 0;
