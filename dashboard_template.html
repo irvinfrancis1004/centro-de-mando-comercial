@@ -682,7 +682,7 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   <section class="tabpanel" data-panel="presupuesto">
     <div class="th-bar">
       <h3>Presupuesto y adquisición</h3>
-      <span class="hint">Leads reales y gasto por canal, tomados de las hojas de pauta del Excel · hoy solo Facebook trae desglose por sucursal</span>
+      <span class="hint" id="presupuestoHint">Leads reales y gasto por canal, tomados de las hojas de pauta del Excel · hoy solo Facebook trae desglose por sucursal</span>
     </div>
     <div class="kgrid" id="presupuestoKgrid"></div>
 
@@ -1121,18 +1121,25 @@ const MONEY0=new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maxi
 function adspendView(canal,sedeSet){
   // GERONTOLOGIA no entra en Consolidado a propósito (ver recsForCanal) — queda aparte
   const canales = canal==='TODOS' ? ['FACEBOOK','PROMOCIONES','GOOGLE','ORGANICO'] : [canal];
-  let leads=0, gastado=0, bySedeAvailable=false;
+  const sedeFiltrado = !!(sedeSet && sedeSet.size);
+  let leads=0, gastado=0, bySedeAvailable=false, omitido=false;
   for(const c of canales){
     const ch=ADSPEND[c]; if(!ch) continue;
     if(c==='FACEBOOK' && ch.bySede){
       bySedeAvailable=true;
-      const keys = sedeSet && sedeSet.size ? [...sedeSet] : Object.keys(ch.bySede);
+      const keys = sedeFiltrado ? [...sedeSet] : Object.keys(ch.bySede);
       for(const s of keys){ const v=ch.bySede[s]; if(v){ leads+=v.leads; gastado+=v.gastado; } }
     } else if(ch.total){
+      // PROMOCIONES/GOOGLE/ORGANICO son agregados de TODA la red, sin desglose por sucursal.
+      // Si hay un filtro de sede activo no se pueden sumar aquí (no sabemos qué parte es de esa
+      // sucursal) — sumarlos igual infla el número (bug real: Ajusco mostraba 1002 en vez de 119,
+      // porque se sumaban los totales de red completos encima del dato real de Facebook). Se
+      // omiten y se avisa con `omitido` para que la UI aclare que faltan esos canales en la vista.
+      if(sedeFiltrado){ omitido=true; continue; }
       leads+=ch.total.leads; gastado+=ch.total.gastado;
     }
   }
-  return { leads, gastado, cpl: leads?gastado/leads:0, bySedeAvailable };
+  return { leads, gastado, cpl: leads?gastado/leads:0, bySedeAvailable, omitido };
 }
 function daysInMonth(y,mZeroBased){ return new Date(y,mZeroBased+1,0).getDate(); }
 /* corte compartido del mes en curso — Irvin llena cada día con la fecha real de ese día, así que
@@ -1162,6 +1169,9 @@ function monthProjection(recs){
 function renderPresupuesto(recs,k,av){
   if(!$('presupuestoKgrid')) return;
   av = av || adspendView(state.canal,state.sedes);
+  if($('presupuestoHint')) $('presupuestoHint').innerHTML = av.omitido
+    ? 'Leads reales y gasto por canal, tomados de las hojas de pauta del Excel · hoy solo Facebook trae desglose por sucursal · <b style="color:var(--amber)">con sede filtrada, Promociones/Google/Orgánico no se suman aquí (son agregados de toda la red, no de esta sucursal)</b>'
+    : 'Leads reales y gasto por canal, tomados de las hojas de pauta del Excel · hoy solo Facebook trae desglose por sucursal';
   const agendReal = av.leads? k.agendados/av.leads : 0;
   const efctSobreLeads = av.leads? k.efectivos/av.leads : 0;
   const cac = k.efectivos? av.gastado/k.efectivos : 0;

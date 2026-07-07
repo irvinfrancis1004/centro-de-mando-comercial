@@ -205,6 +205,16 @@ que `parseWorkbook`, ver §5). Lo que el navegador **no** replica todavía: las 
 (Mixquiahuala→Facebook, Orgánico gana sobre Facebook) ni el reporte de duplicados
 entre canales — esas solo corren en `excel_to_dat.js`.
 
+> **Bug corregido 2026-07-07** (reportado por Irvin: "Ajusco tiene 119 leads en el Excel y en el
+> dash dice 1002"): `adspendView(canal, sedeSet)` sumaba los totales de **toda la red** de
+> `PROMOCIONES`/`GOOGLE`/`ORGANICO` (agregados sin desglose por sucursal) encima del dato real de
+> Facebook, incluso cuando había un filtro de sede activo — 119 (Facebook Ajusco) + 841
+> (Promociones, toda la red) + 31 (Google, toda la red) + 11 (Orgánico, toda la red) = 1002. Ahora,
+> si `sedeSet` tiene alguna sede seleccionada, esos 3 canales **se omiten** del total (no hay forma
+> de saber qué parte les toca a esa sucursal específica) y se marca `av.omitido=true`;
+> `renderPresupuesto` muestra un aviso en el hint de la pestaña cuando esto pasa. Sin filtro de
+> sede el comportamiento no cambia (sí se suman, correctamente, para la red completa).
+
 En el dashboard, `adspendView(canal, sedeSet)` (dashboard_template.html) sirve leads/gasto reales
 respetando el filtro de canal/sede — para FACEBOOK puede sumar por sucursal seleccionada; para los
 otros 3 canales siempre es el agregado del canal completo (no hay desglose que filtrar). Con eso:
