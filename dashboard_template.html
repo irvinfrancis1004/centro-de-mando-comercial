@@ -1746,7 +1746,7 @@ function extractPatientRows(rows,canalFor){
   const head=rows[hr].map(c=>c==null?'':String(c).trim().toUpperCase());
   const col=(...keys)=>{ for(const k of keys){ const idx=head.findIndex(h=>h.includes(k)); if(idx>=0) return idx; } return -1; };
   const ci={ dia:col('DIA'),nom:col('NOMBRE'),ape:col('APELLIDO'),num:col('NUMERO','NÚMERO'),fec:col('FECHA DE AGENDA','AGENDA'),
-    sede:col('SEDE'),asis:col('ASISTE'),costo:col('COSTO'),plan:col('PLAN'),monto:col('MONTO'),cxc:col('CXC','CUENTA'),pad:col('PADECIMIENTO'),servicio:col('SERVICIO') };
+    sede:col('SEDE','SUCURSAL'),asis:col('ASISTE'),costo:col('COSTO'),plan:col('PLAN'),monto:col('MONTO'),cxc:col('CXC','CUENTA'),pad:col('PADECIMIENTO'),servicio:col('SERVICIO') };
   const isNum=(v)=>typeof v==='number'&&isFinite(v);
   for(let i=hr+1;i<rows.length;i++){
     const row=rows[i]; const nm=ci.nom>=0?row[ci.nom]:null;

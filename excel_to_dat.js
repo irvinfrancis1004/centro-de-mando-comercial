@@ -198,7 +198,7 @@ function extractPatientRows(rows, canalFor) {
   };
   const ci = {
     dia: col('DIA'), nom: col('NOMBRE'), ape: col('APELLIDO'), num: col('NUMERO', 'NÚMERO'), fec: col('FECHA DE AGENDA', 'AGENDA'),
-    sede: col('SEDE'), asis: col('ASISTE'), costo: col('COSTO'), plan: col('PLAN'), monto: col('MONTO'),
+    sede: col('SEDE', 'SUCURSAL'), asis: col('ASISTE'), costo: col('COSTO'), plan: col('PLAN'), monto: col('MONTO'),
     cxc: col('CXC', 'CUENTA'), pad: col('PADECIMIENTO'), servicio: col('SERVICIO'),
   };
   for (let i = hr + 1; i < rows.length; i++) {
