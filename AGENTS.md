@@ -205,15 +205,17 @@ que `parseWorkbook`, ver §5). Lo que el navegador **no** replica todavía: las 
 (Mixquiahuala→Facebook, Orgánico gana sobre Facebook) ni el reporte de duplicados
 entre canales — esas solo corren en `excel_to_dat.js`.
 
-> **Bug corregido 2026-07-07** (reportado por Irvin: "Ajusco tiene 119 leads en el Excel y en el
-> dash dice 1002"): `adspendView(canal, sedeSet)` sumaba los totales de **toda la red** de
-> `PROMOCIONES`/`GOOGLE`/`ORGANICO` (agregados sin desglose por sucursal) encima del dato real de
-> Facebook, incluso cuando había un filtro de sede activo — 119 (Facebook Ajusco) + 841
-> (Promociones, toda la red) + 31 (Google, toda la red) + 11 (Orgánico, toda la red) = 1002. Ahora,
-> si `sedeSet` tiene alguna sede seleccionada, esos 3 canales **se omiten** del total (no hay forma
-> de saber qué parte les toca a esa sucursal específica) y se marca `av.omitido=true`;
-> `renderPresupuesto` muestra un aviso en el hint de la pestaña cuando esto pasa. Sin filtro de
-> sede el comportamiento no cambia (sí se suman, correctamente, para la red completa).
+> **Historia del 2026-07-07** (Ajusco mostraba 1002 leads en vez de 119): `adspendView` sumaba los
+> totales de **toda la red** de `PROMOCIONES`/`GOOGLE`/`ORGANICO` (agregados sin desglose por
+> sucursal) encima del dato real de Facebook — 119 (Facebook Ajusco) + 841 (Promociones, toda la
+> red) + 31 (Google) + 11 (Orgánico) = 1002. Primero se corrigió omitiendo esos 3 canales cuando
+> había un filtro de sede activo, pero **Irvin pidió revertir eso el mismo día**: prefiere ver el
+> total con esa imprecisión conocida (sabe que Promociones/Google/Orgánico son de toda la red, no
+> de la sucursal filtrada) a no verlo del todo. `adspendView` vuelve a sumar siempre los 3 canales
+> completos, con o sin sede filtrada; `av.omitido` se sigue calculando (por si se necesita mostrar
+> el aviso de nuevo en el futuro) pero **ya no resta nada** — solo dispara el aviso informativo en
+> el hint de la pestaña Presupuesto, no una omisión real. **No revertir a la versión que omite sin
+> que Irvin lo pida explícitamente de nuevo** — ya se intentó y no era lo que quería.
 
 En el dashboard, `adspendView(canal, sedeSet)` (dashboard_template.html) sirve leads/gasto reales
 respetando el filtro de canal/sede — para FACEBOOK puede sumar por sucursal seleccionada; para los
@@ -411,6 +413,8 @@ Todo el JS está en el único `<script>` del final. Funciones clave:
 - `renderFocos(base)` (focos rojos: sedes ≥4 agendados, no verde, top 5 por urgencia)
 - `renderPresupuesto(recs,k)` + `adspendView(canal,sedeSet)` + `monthProjection(recs)` (leads
   reales/CAC/CPL + proyección de cierre de mes, ver §5c)
+- `renderLeadsPorDivision()` (leads reales de Facebook agrupados por división vía `tierOf`,
+  panel fijo en Presupuesto — reutiliza `rankBarsHtml`, ver §5c)
 - `renderRanking(recs)` + `rankBarsHtml(rows,valueKey,fmt)` (5 comparativas por sucursal —
   iniciales/agendados, % asistencia, % conversión, % cierre, cuenta por cobrar — coloreadas por
   división. Reemplazó al mapa 3D, ver §11)
