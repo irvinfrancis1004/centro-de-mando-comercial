@@ -1149,11 +1149,14 @@ function adspendView(canal,sedeSet){
   return { leads, gastado, cpl: leads?gastado/leads:0, bySedeAvailable, omitido };
 }
 function daysInMonth(y,mZeroBased){ return new Date(y,mZeroBased+1,0).getDate(); }
-/* corte compartido del mes en curso — Irvin llena cada día con la fecha real de ese día, así que
-   hoy ya cuenta completo (no se resta un día). Usado por monthProjection y por la meta de sucursal. */
+/* corte compartido del mes en curso — a DÍA VENCIDO (el último día ya completo, o sea ayer, no
+   hoy que todavía va corriendo). Irvin pidió este cambio el 2026-07-07 explícitamente para la
+   proyección de cierre de mes — antes se usaba "hoy cuenta completo", pero prefiere no contar el
+   día en curso (aún incompleto) como si ya hubiera cerrado. Usado por monthProjection, la meta de
+   sucursal y Plan diario — todos comparten este mismo corte. */
 function monthCutoffInfo(){
   const now=new Date();
-  const cutoff=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const cutoff=new Date(now.getFullYear(),now.getMonth(),now.getDate()-1);
   const y=cutoff.getFullYear(), m=cutoff.getMonth();
   return { cutoff, y, m, diasTranscurridos:Math.max(cutoff.getDate(),1), diasDelMes:daysInMonth(y,m) };
 }

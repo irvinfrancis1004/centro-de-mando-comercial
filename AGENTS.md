@@ -238,13 +238,18 @@ otros 3 canales siempre es el agregado del canal completo (no hay desglose que f
 > sin desglose por sede; si la sede no tiene ningún registro de Facebook, cae de vuelta al conteo
 > de filas. Esto alimenta la tabla de Sucursales (columnas Leads/% Agend).
 
-**Proyección de cierre de mes** (`monthProjection(recs)`): usa la fecha real del navegador (hoy) como
-corte — Irvin confirmó (2026-07-01) que llena la columna `FECHA DE AGENDA` **día a día, al finalizar
-el día** (hoy carga las citas de hoy, mañana las del día 2, etc.), así que el día de hoy ya cuenta
-completo, no hay que restar un día. Cuenta agendados/efectivos/planes del mes en curso hasta hoy,
-saca el ritmo diario (`total/díasTranscurridos`) y proyecta a fin de mes (`ritmo × díasDelMes`,
-usando `daysInMonth()` real del mes — 31 para julio, no hardcodeado). Se muestra en la pestaña
-**Presupuesto**, debajo de las tarjetas de leads/CAC.
+**Proyección de cierre de mes** (`monthProjection(recs)`): usa **"día vencido"** como corte — el
+último día ya completo (ayer), NO el día en curso. **Historia:** el 2026-07-01 Irvin dijo que llena
+`FECHA DE AGENDA` día a día al finalizar el día, así que se usó "hoy cuenta completo" (sin restar
+un día). El 2026-07-07 pidió explícitamente el cambio a día vencido — no quiere que el día en curso
+(todavía incompleto) cuente como si ya hubiera cerrado. `monthCutoffInfo()` (§5d) hace
+`cutoff = hoy - 1 día`; si hoy es el día 1 del mes, el corte cae en el último día del mes anterior
+(caso límite ya contemplado, no es un bug). Cuenta agendados/efectivos/planes del mes en curso hasta
+el corte, saca el ritmo diario (`total/díasTranscurridos`) y proyecta a fin de mes
+(`ritmo × díasDelMes`, usando `daysInMonth()` real del mes — 31 para julio, no hardcodeado). Se
+muestra en la pestaña **Presupuesto**, debajo de las tarjetas de leads/CAC. **No volver a "hoy
+cuenta completo" sin que Irvin lo pida de nuevo explícitamente** — ya se cambió una vez en su
+petición directa.
 
 > Los leads/gasto de Facebook por sucursal usan los mismos códigos cortos que `TIERS`
 > (normalizados con `normSede`, ver §6) — si el nombre de una sucursal nueva no tiene un prefijo ya
@@ -469,10 +474,10 @@ mal *ahora*, a mitad de mes, en vez de que todas las sucursales salgan "en défi
 porque aún no termina el mes. El detalle completo (ritmo necesario + déficit) sale en el `title`
 (tooltip) del punto de semáforo y del número, para no saturar la celda.
 
-Igual que en `monthProjection` (§5c), "hoy" cuenta completo (Irvin llena el Excel día a día, así
-que no se resta un día al corte). La fila TOTAL GENERAL y las filas de subtotal por división suman
-`meta`/`lleva` de sus sucursales y recalculan ritmo/proyección/semáforo sobre esa suma (no promedian
-los semáforos individuales).
+Usa el mismo corte compartido que `monthProjection` (§5c, `monthCutoffInfo()`) — **a día vencido**
+(ayer, no el día en curso) desde el 2026-07-07. La fila TOTAL GENERAL y las filas de subtotal por
+división suman `meta`/`lleva` de sus sucursales y recalculan ritmo/proyección/semáforo sobre esa
+suma (no promedian los semáforos individuales).
 
 ## 9. Pestañas (7) — cada una es un `<section class="tabpanel" data-panel="X">`
 
