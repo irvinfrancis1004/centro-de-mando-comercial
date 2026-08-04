@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 /**
- * excel_to_dat.js — Convierte el Excel de origen en el archivo intermedio pacientes.dat.
+ * excel_to_dat.js — Convierte el Excel de origen en el archivo intermedio data/<MES>/pacientes.dat.
  *
- * Uso:
- *   node excel_to_dat.js                  -> usa ./COMERCIAL_JULIO.xlsx (o la ruta guardada en .last_source)
- *   node excel_to_dat.js "ruta\archivo.xlsx"  -> usa ese Excel como fuente y lo recuerda para la próxima vez
+ * Uso (multi-mes, ver AGENTS.md §15):
+ *   node excel_to_dat.js                          -> usa el mes activo (el único no congelado en months.json)
+ *   node excel_to_dat.js AGOSTO                    -> usa el Excel ya guardado para AGOSTO
+ *   node excel_to_dat.js AGOSTO "ruta\excel.xlsx"  -> usa ese Excel para AGOSTO y lo recuerda para la próxima vez
+ *   node excel_to_dat.js JULIO ... --force         -> fuerza regenerar un mes congelado (frozen:true)
+ *
+ * Un mes con frozen:true en months.json (ver §15) se niega a regenerarse sin --force — así se
+ * garantiza que un mes cerrado "ya no se mueva en nada" (petición de Irvin, 2026-08-01).
  *
  * Replica exactamente la lógica de parseWorkbook() del dashboard (dashboard_template.html)
  * para que el .dat generado aquí sea idéntico a lo que produciría el botón "Subir Excel".
@@ -28,22 +33,47 @@
 const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
+const MONTHS = require('./months');
 
 const ROOT = __dirname;
-const LAST_SOURCE_FILE = path.join(ROOT, '.last_source');
-const DEFAULT_XLSX = path.join(ROOT, 'COMERCIAL_JULIO.xlsx');
-const OUT_DAT = path.join(ROOT, 'pacientes.dat');
-const OUT_ADSPEND = path.join(ROOT, 'adspend.dat');
 const OVERRIDES_FILE = path.join(ROOT, 'channel_overrides.json');
 
-function resolveSourcePath() {
-  const argPath = process.argv[2];
-  if (argPath) return path.resolve(argPath);
-  if (fs.existsSync(LAST_SOURCE_FILE)) {
-    const saved = fs.readFileSync(LAST_SOURCE_FILE, 'utf8').trim();
-    if (saved && fs.existsSync(saved)) return saved;
+/** Resuelve mes + ruta de Excel a partir de argv, months.json y las reglas de arriba. */
+function resolveTarget() {
+  const args = process.argv.slice(2).filter(a => a !== '--force');
+  const force = process.argv.includes('--force');
+  const [monthArg, xlsxArg] = args;
+
+  const data = MONTHS.load();
+  let key = monthArg ? monthArg.toUpperCase().trim() : null;
+
+  if (!key) {
+    const active = MONTHS.activeMonth(data);
+    if (!active) {
+      const keys = data.months.map(m => m.key).join(', ') || '(ninguno todavía)';
+      console.error('ERROR: no pude adivinar el mes. Meses conocidos: ' + keys);
+      console.error('Especifícalo: node excel_to_dat.js <MES> ["ruta\\al\\excel.xlsx"]');
+      process.exit(1);
+    }
+    key = active.key;
   }
-  return DEFAULT_XLSX;
+
+  const existing = MONTHS.find(data, key);
+  if (existing && existing.frozen && !force) {
+    console.error(`ERROR: ${key} está congelado (frozen) — no se regenera. Usa --force si de verdad quieres sobreescribirlo.`);
+    process.exit(1);
+  }
+
+  let srcPath;
+  if (xlsxArg) srcPath = path.resolve(xlsxArg);
+  else if (existing && existing.source) srcPath = existing.source;
+  else {
+    console.error(`ERROR: no tengo un Excel guardado para ${key} todavía. Dame la ruta:`);
+    console.error(`  node excel_to_dat.js ${key} "ruta\\al\\excel.xlsx"`);
+    process.exit(1);
+  }
+
+  return { key, srcPath, data, existing, force };
 }
 
 const SEDE_FIX = { CUATITLAN: 'CUAUTITLAN' };
@@ -80,6 +110,18 @@ function asISO(v) {
     return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0');
   }
   return String(v).slice(0, 10);
+}
+/** Extrae la hora "HH:MM" de una celda de fecha+hora (Date de Excel o texto "DD/MM/AAAA HH:MM").
+ *  `null` si la celda no trae hora — ej. FECHA DE AGENDA desde 2026-08 (ver AGENTS.md §4). */
+function asHora(v) {
+  if (v == null) return null;
+  if (v instanceof Date && !isNaN(v)) {
+    const h = v.getHours(), m = v.getMinutes();
+    if (h === 0 && m === 0) return null; // fecha sin hora real (medianoche = "no capturada")
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+  const s = String(v).match(/(\d{1,2}):(\d{2})/);
+  return s ? s[1].padStart(2, '0') + ':' + s[2] : null;
 }
 function isNum(v) { return typeof v === 'number' && isFinite(v); }
 
@@ -159,7 +201,7 @@ function reportConflicts(pendingConflicts) {
   console.log('');
   console.log(`ATENCION · ${pendingConflicts.length} paciente(s) aparecen en más de un canal (mismo número + nombre + sucursal):`);
   pendingConflicts.forEach((c, i) => {
-    const detalle = c.filas.map(r => `${r.canal} (fecha ${r.fecha || r.dia || 's/f'})`).join(', ');
+    const detalle = c.filas.map(r => `${r.canal} (fecha ${r.fecha || 's/f'})`).join(', ');
     console.log(`  ${i + 1}. ${c.nombre} · ${c.numero} · ${c.sede}  ->  ${detalle}`);
   });
   console.log('  Dime a que canal pertenece cada uno (o si son personas distintas) y lo agrego a channel_overrides.json.');
@@ -197,30 +239,28 @@ function extractPatientRows(rows, canalFor) {
     return -1;
   };
   const ci = {
-    dia: col('DIA'), nom: col('NOMBRE'), ape: col('APELLIDO'), num: col('NUMERO', 'NÚMERO'), fec: col('FECHA DE AGENDA', 'AGENDA'),
-    sede: col('SEDE', 'SUCURSAL'), asis: col('ASISTE'), costo: col('COSTO'), plan: col('PLAN'), monto: col('MONTO'),
-    cxc: col('CXC', 'CUENTA'), pad: col('PADECIMIENTO'), servicio: col('SERVICIO'),
+    nom: col('NOMBRE'), ape: col('APELLIDO'), num: col('NUMERO', 'NÚMERO'), fec: col('FECHA DE AGENDA', 'AGENDA'),
+    sede: col('SEDE', 'SUCURSAL'), asis: col('ASISTE'), especialidad: col('ESPECIALIDAD'),
+    pad: col('PADECIMIENTO'), servicio: col('SERVICIO'),
   };
   for (let i = hr + 1; i < rows.length; i++) {
     const row = rows[i];
     const nm = ci.nom >= 0 ? row[ci.nom] : null;
     if (nm == null || String(nm).trim() === '') continue;
     const ape = ci.ape >= 0 && row[ci.ape] != null ? String(row[ci.ape]).trim() : '';
-    const costo = ci.costo >= 0 ? row[ci.costo] : null;
     const padecimiento = ci.pad >= 0 && row[ci.pad] != null ? String(row[ci.pad]).replace(/\\n/g, '\n') : '';
+    const fechaRaw = ci.fec >= 0 ? row[ci.fec] : null;
     out.push({
       canal: canalFor(padecimiento),
-      dia: asISO(ci.dia >= 0 ? row[ci.dia] : null),
       nombre: ape ? (String(nm).trim() + ' ' + ape) : String(nm).trim(),
       numero: ci.num >= 0 && row[ci.num] != null ? String(row[ci.num]).trim() : '',
-      fecha: asISO(ci.fec >= 0 ? row[ci.fec] : null),
+      fecha: asISO(fechaRaw),
+      hora: asHora(fechaRaw),
       sede: normSede(ci.sede >= 0 ? row[ci.sede] : null),
+      // ASISTE ya no existe en BASE DE PACIENTES (desde 2026-08) — solo BASE DE GERONTOLOGIA lo trae
+      // real todavía; para el resto queda 'SIN DATO' (ver AGENTS.md §4).
       asiste: ci.asis >= 0 && row[ci.asis] != null ? String(row[ci.asis]).trim().toUpperCase() : 'SIN DATO',
-      costo_pago: isNum(costo) ? costo : 0,
-      costo_pendiente: costo != null && !isNum(costo),
-      plan: ci.plan >= 0 && row[ci.plan] != null ? String(row[ci.plan]).trim().toUpperCase() : 'SIN DATO',
-      monto: ci.monto >= 0 && isNum(row[ci.monto]) ? row[ci.monto] : 0,
-      cxc: ci.cxc >= 0 && isNum(row[ci.cxc]) ? row[ci.cxc] : 0,
+      especialidad: ci.especialidad >= 0 && row[ci.especialidad] != null ? String(row[ci.especialidad]).trim() : '',
       padecimiento,
       servicio: ci.servicio >= 0 && row[ci.servicio] != null ? String(row[ci.servicio]).trim() : '',
     });
@@ -283,7 +323,7 @@ function parseFacebookAdSheet(rows) {
         for (const k of keys) { const idx = head.findIndex(h => h.includes(k)); if (idx >= 0) return idx; }
         return -1;
       };
-      ci = { metaPac: col('META DE PACIENTES'), metaLeads: col('META LEADS'), gastado: col('PP GASTADO', 'GASTADO'), leads: col('LEADS'), cpl: col('CPL') };
+      ci = { metaPac: col('META DE PACIENTES'), metaLeads: col('META LEADS'), gastado: col('PP GASTADO', 'GASTADO'), leads: col('LEADS'), cpl: col('CPL'), agendados: col('AGENDADOS'), asistidos: col('ASISTIDOS') };
       continue;
     }
     if (label === 'TOTAL' || !ci) continue;
@@ -293,9 +333,42 @@ function parseFacebookAdSheet(rows) {
     const metaPacientes = ci.metaPac >= 0 && isNum(row[ci.metaPac]) ? row[ci.metaPac] : 0;
     const metaLeads = ci.metaLeads >= 0 && isNum(row[ci.metaLeads]) ? row[ci.metaLeads] : 0;
     const cpl = ci.cpl >= 0 && isNum(row[ci.cpl]) ? row[ci.cpl] : (leads ? gastado / leads : 0);
-    bySede[sede] = { metaPacientes, metaLeads, gastado, leads, cpl };
+    // AGENDADOS/ASISTIDOS (agregado 2026-08): acumulado de citas por sucursal, capturado a mano por el
+    // equipo — no se calcula, se lee tal cual. `asistidos` se corrige después con correctAsistidos().
+    const agendadosRef = ci.agendados >= 0 && isNum(row[ci.agendados]) ? row[ci.agendados] : 0;
+    const asistidosRaw = ci.asistidos >= 0 && isNum(row[ci.asistidos]) ? row[ci.asistidos] : 0;
+    bySede[sede] = { metaPacientes, metaLeads, gastado, leads, cpl, agendadosRef, asistidosRaw, asistidos: asistidosRaw };
   }
   return bySede;
+}
+
+/** Corrige el ASISTIDOS agregado de Facebook por sucursal restando a los pacientes que, según la
+ *  clasificación por palabra clave (ver detectCanalFromPad/applyChannelRules), en realidad son de
+ *  otro canal (Google/Promociones/Orgánico) — Facebook históricamente registra "quién asistió en la
+ *  sucursal" sin distinguir canal de origen. Pedido explícito de Irvin (2026-08-01): resta por conteo
+ *  exacto de pacientes reclasificados, no proporcional. Ejemplo: Facebook dice 100 asistidos en
+ *  Balbuena, pero 20 pacientes de Balbuena tienen "ORGANICO" en su comentario y 10 "PROMOCIONES" ->
+ *  Facebook queda en 70, Orgánico y Promociones ganan 20 y 10 respectivamente en esa sucursal.
+ *  `AGENDADOS` de la hoja Facebook es solo referencia — el conteo de agendados sigue siendo por fila
+ *  de BASE DE PACIENTES (agendCount en el dashboard), no se corrige aquí. */
+function correctAsistidos(records, facebookBySede) {
+  const porSedeCanal = {};
+  for (const r of records) {
+    if (r.canal === 'GERONTOLOGIA') continue; // Gerontología no tiene desglose de Facebook, aparte
+    const s = (porSedeCanal[r.sede] = porSedeCanal[r.sede] || {});
+    s[r.canal] = (s[r.canal] || 0) + 1;
+  }
+  const bySedeAsistidos = { GOOGLE: {}, PROMOCIONES: {}, ORGANICO: {} };
+  for (const sede in facebookBySede) {
+    const conteo = porSedeCanal[sede] || {};
+    const otros = (conteo.GOOGLE || 0) + (conteo.PROMOCIONES || 0) + (conteo.ORGANICO || 0);
+    const raw = facebookBySede[sede].asistidosRaw || 0;
+    facebookBySede[sede].asistidos = Math.max(0, raw - otros);
+    for (const canal of ['GOOGLE', 'PROMOCIONES', 'ORGANICO']) {
+      if (conteo[canal]) bySedeAsistidos[canal][sede] = conteo[canal];
+    }
+  }
+  return bySedeAsistidos;
 }
 
 /** Hojas de presupuesto de PROMOCIONES/GOOGLE/ORGANICO: hoy solo traen LEADS/PRESUPUESTO en
@@ -358,12 +431,13 @@ function parseProyecciones(rows) {
   return result;
 }
 
-function extractAdSpend(wb) {
+function extractAdSpend(wb, records) {
   const sheetRows = (name) => {
     const sh = wb.Sheets[name];
     return sh ? XLSX.utils.sheet_to_json(sh, { header: 1, defval: null, raw: true, blankrows: false }) : [];
   };
   const facebookBySede = parseFacebookAdSheet(sheetRows('FACEBOOK'));
+  const bySedeAsistidos = correctAsistidos(records, facebookBySede);
   const facebookTotal = Object.values(facebookBySede).reduce(
     (a, s) => ({ metaPacientes: a.metaPacientes + s.metaPacientes, metaLeads: a.metaLeads + s.metaLeads, gastado: a.gastado + s.gastado, leads: a.leads + s.leads }),
     { metaPacientes: 0, metaLeads: 0, gastado: 0, leads: 0 }
@@ -371,19 +445,24 @@ function extractAdSpend(wb) {
   facebookTotal.cpl = facebookTotal.leads ? facebookTotal.gastado / facebookTotal.leads : 0;
   return {
     FACEBOOK: { bySede: facebookBySede, total: facebookTotal },
-    PROMOCIONES: { total: parseAggregateAdSheet(sheetRows('PROMOCIONES')) },
-    GOOGLE: { total: parseAggregateAdSheet(sheetRows('GOOGLE')) },
-    ORGANICO: { total: parseAggregateAdSheet(sheetRows('ORGANICO')) },
+    PROMOCIONES: { total: parseAggregateAdSheet(sheetRows('PROMOCIONES')), bySedeAsistidos: bySedeAsistidos.PROMOCIONES },
+    GOOGLE: { total: parseAggregateAdSheet(sheetRows('GOOGLE')), bySedeAsistidos: bySedeAsistidos.GOOGLE },
+    ORGANICO: { total: parseAggregateAdSheet(sheetRows('ORGANICO')), bySedeAsistidos: bySedeAsistidos.ORGANICO },
     GERONTOLOGIA: { total: parseAggregateAdSheet(sheetRows('GERONTOLOGIA')) },
     PLAN_DIARIO: parseProyecciones(sheetRows('PROYECCIONES')),
   };
 }
 
-const srcPath = resolveSourcePath();
+const { key, srcPath, data, existing, force } = resolveTarget();
 if (!fs.existsSync(srcPath)) {
   console.error(`ERROR: no encontré el Excel de origen en: ${srcPath}`);
   process.exit(1);
 }
+
+const outDir = MONTHS.dataDir(key);
+fs.mkdirSync(outDir, { recursive: true });
+const OUT_DAT = path.join(outDir, 'pacientes.dat');
+const OUT_ADSPEND = path.join(outDir, 'adspend.dat');
 
 const wb = XLSX.readFile(srcPath, { cellDates: true });
 let records = parseWorkbook(wb);
@@ -395,18 +474,29 @@ if (records.length === 0) {
 const { records: cleaned, mixCount, overrideResolvedCount, organicoPriorityCount, pendingConflicts, numeroVacioSkipped } = applyChannelRules(records);
 records = cleaned;
 
-const adspend = extractAdSpend(wb);
+const adspend = extractAdSpend(wb, records);
 
 fs.writeFileSync(OUT_DAT, JSON.stringify(records), 'utf8');
 fs.writeFileSync(OUT_ADSPEND, JSON.stringify(adspend), 'utf8');
-fs.writeFileSync(LAST_SOURCE_FILE, srcPath, 'utf8');
+
+MONTHS.upsert(data, {
+  key,
+  label: (existing && existing.label) || MONTHS.labelFor(key),
+  year: (existing && existing.year) || new Date().getFullYear(),
+  source: srcPath,
+  frozen: force ? (existing ? existing.frozen : false) : false,
+  frozenAt: force ? (existing ? existing.frozenAt : null) : null,
+  updatedAt: new Date().toISOString(),
+});
+MONTHS.save(data);
 
 const porCanal = records.reduce((acc, r) => ((acc[r.canal] = (acc[r.canal] || 0) + 1), acc), {});
-console.log(`OK  ·  fuente: ${srcPath}`);
-console.log(`OK  ·  ${records.length} registros -> ${path.basename(OUT_DAT)}  (${JSON.stringify(porCanal)})`);
+console.log(`OK  ·  mes: ${key}  ·  fuente: ${srcPath}`);
+console.log(`OK  ·  ${records.length} registros -> ${path.relative(ROOT, OUT_DAT)}  (${JSON.stringify(porCanal)})`);
 if (mixCount) console.log(`OK  ·  ${mixCount} registro(s) GOOGLE+MIXQUIAHUALA reclasificados a FACEBOOK (regla fija).`);
 if (organicoPriorityCount) console.log(`OK  ·  ${organicoPriorityCount} registro(s) quitados de FACEBOOK por estar duplicados en ORGANICO (regla fija).`);
 if (overrideResolvedCount) console.log(`OK  ·  ${overrideResolvedCount} duplicado(s) resueltos automáticamente vía channel_overrides.json.`);
 if (numeroVacioSkipped) console.log(`AVISO · ${numeroVacioSkipped} caso(s) con mismo nombre+sede en varios canales pero sin número para confirmar -> se dejaron tal cual, revísalos si quieres.`);
 reportConflicts(pendingConflicts);
-console.log(`OK  ·  presupuesto -> ${path.basename(OUT_ADSPEND)}  (FACEBOOK: ${adspend.FACEBOOK.total.leads} leads / $${adspend.FACEBOOK.total.gastado} en ${Object.keys(adspend.FACEBOOK.bySede).length} sucursales)`);
+console.log(`OK  ·  presupuesto -> ${path.relative(ROOT, OUT_ADSPEND)}  (FACEBOOK: ${adspend.FACEBOOK.total.leads} leads / $${adspend.FACEBOOK.total.gastado} en ${Object.keys(adspend.FACEBOOK.bySede).length} sucursales)`);
+console.log(`Siguiente paso: node build.js ${key}`);
