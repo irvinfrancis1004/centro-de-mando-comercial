@@ -344,16 +344,33 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
 .padrow .pvv i{font-style:normal}
 .pgb{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.3px;padding:2px 8px;border-radius:20px;white-space:nowrap}
 
-/* ===== plan diario ===== */
-.plandiario-rows{display:flex;flex-direction:column;gap:3px}
-.planrow{display:grid;grid-template-columns:96px 1fr auto;align-items:center;gap:12px;padding:4px 8px;border-radius:8px}
-.planrow:hover{background:rgba(255,255,255,.025)}
-.planrow.futuro{opacity:.55}
-.pdday{font-family:var(--mono);font-size:11px;color:var(--ink2);text-transform:capitalize}
-.pdvv{font-family:var(--mono);font-size:11px;color:var(--ink2);white-space:nowrap;text-align:right;min-width:150px;display:flex;align-items:center;justify-content:flex-end;gap:7px}
-.pdvv b{color:var(--ink);font-weight:700}
-.pdvv i{font-style:normal;color:var(--dim)}
-@media(max-width:720px){ .planrow{grid-template-columns:76px 1fr auto} .pdvv{min-width:0} }
+/* ===== plan diario (calendario, rediseñado 2026-08-04 — pedido de Irvin: "que se vea mejor y
+   entendible", reemplaza la lista larga de una fila por día) ===== */
+.plancal-head{display:grid;grid-template-columns:repeat(7,1fr);gap:7px;margin:2px 0 6px}
+.plancal-head span{font-family:var(--mono);font-size:9.5px;letter-spacing:1px;color:var(--dim);text-align:center;text-transform:uppercase}
+.plancal{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}
+.plancell{position:relative;border-radius:11px;padding:8px 7px 7px;min-height:60px;
+  background:var(--bg2);border:1px solid var(--line);display:flex;flex-direction:column;justify-content:space-between;
+  transition:border-color .15s}
+.plancell.blank{background:transparent;border-color:transparent}
+.plancell .pcday{font-family:var(--mono);font-size:9.5px;color:var(--dim);letter-spacing:.3px}
+.plancell .pcmain{font-family:var(--disp);font-weight:700;font-size:18px;line-height:1.1;color:var(--ink)}
+.plancell .pcsub{font-family:var(--mono);font-size:9.5px;color:var(--ink2)}
+.plancell.verde{border-color:rgba(134,221,87,.4);background:rgba(134,221,87,.07)}
+.plancell.verde .pcmain{color:#A8EC7F}
+.plancell.amarillo{border-color:rgba(245,165,36,.4);background:rgba(245,165,36,.07)}
+.plancell.amarillo .pcmain{color:#FBCB7A}
+.plancell.rojo{border-color:rgba(251,107,91,.45);background:rgba(251,107,91,.09)}
+.plancell.rojo .pcmain{color:#FF9387}
+.plancell.futuro{opacity:.5}
+.plancell.futuro .pcmain{color:var(--ink2);font-size:14px}
+.plancell.sinplan{opacity:.4}
+.plancell.hoy{box-shadow:0 0 0 1.5px var(--teal) inset}
+.plancal-legend{display:flex;flex-wrap:wrap;gap:16px;margin:2px 0 16px;font-size:11.5px;color:var(--ink2)}
+.plancal-legend span{display:inline-flex;align-items:center;gap:7px}
+.plancal-legend .smfdot{margin-right:0}
+.plc-dim{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--line2);flex:none}
+@media(max-width:720px){ .plancal-head,.plancal{grid-template-columns:repeat(7,1fr);gap:5px} .plancell{min-height:50px;padding:6px 5px 5px} .plancell .pcmain{font-size:15px} }
 .pgb .gd{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;opacity:.85}
 .padtag{display:inline-flex;align-items:center;gap:8px;background:rgba(25,194,168,.12);border:1px solid rgba(25,194,168,.34);color:#9CEEDD;font-family:var(--body);font-size:11.5px;font-weight:600;border-radius:20px;padding:4px 7px 4px 12px;margin-left:2px}
 .padtag button{appearance:none;border:none;background:rgba(255,255,255,.08);color:#9CEEDD;width:16px;height:16px;border-radius:50%;cursor:pointer;font-size:11px;display:grid;place-items:center}
@@ -717,7 +734,7 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   <section class="tabpanel" data-panel="horarios">
     <div class="th-bar">
       <h3>Horarios y áreas</h3>
-      <span class="hint">Qué franjas horarias concentran más citas y a qué área están llegando (Acupuntura, Fisioterapia, Quiropráctica) — para detectar de un vistazo una sede saturada en un área y vacía en otra, y equilibrar agendas al momento</span>
+      <span class="hint">Qué franjas horarias tienen más pacientes que sí llegaron, y a qué área (Acupuntura, Fisioterapia, Quiropráctica) — solo asistencias reales, no agendados — para detectar de un vistazo una sede saturada en un área y vacía en otra, y equilibrar agendas al momento</span>
     </div>
 
     <!-- ALERTAS: DESEQUILIBRIO DE AGENDA POR ÁREA -->
@@ -727,7 +744,7 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
     <div class="tblpanel" id="horarioAreaPanel" style="display:none">
       <div class="th-bar">
         <h3>Horario × Área</h3>
-        <span class="hint">Citas agendadas por franja horaria y área · entre más color, más se concentran ahí</span>
+        <span class="hint">Pacientes que asistieron por franja horaria y área (solo asiste='SI') · entre más color, más se concentran ahí</span>
       </div>
       <div class="tscroll">
         <table id="horarioAreaTable" class="heattbl">
@@ -747,13 +764,13 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
     <div class="tblpanel" id="horariosPanel" style="display:none">
       <div class="th-bar">
         <h3>Horarios pico por sucursal</h3>
-        <span class="hint">Franjas horarias con más agendados, de mayor a menor por sucursal</span>
+        <span class="hint">Franjas horarias con más asistencias reales (solo asiste='SI'), de mayor a menor por sucursal</span>
       </div>
       <div class="tscroll">
         <table id="horariosTable">
           <thead><tr>
             <th>Sucursal</th>
-            <th class="num">Agendados con hora</th>
+            <th class="num">Asistidos con hora</th>
             <th>Franjas más fuertes</th>
           </tr></thead>
           <tbody id="horariosTbody"></tbody>
@@ -763,7 +780,7 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
 
     <!-- POR ÁREA (Acupuntura/Fisioterapia/Quiropráctica — oculto si no hay datos capturados) -->
     <div class="panel-c" id="especialidadPanel" style="display:none">
-      <div class="ph"><h3>Por área · total de la vista</h3><small>agendados por área, todas las sedes/horarios de la vista</small></div>
+      <div class="ph"><h3>Por área · total de la vista</h3><small>asistidos por área (solo asiste='SI'), todas las sedes/horarios de la vista</small></div>
       <div id="especialidadBars"></div>
     </div>
   </section>
@@ -832,6 +849,12 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
     <div class="th-bar">
       <h3>Plan diario por división</h3>
       <span class="hint">Citas agendadas por día vs lo planeado (hoja "Proyecciones") · para ver qué día hay que apretar más y no bajar el ritmo</span>
+    </div>
+    <div class="plancal-legend">
+      <span><i class="smfdot verde"></i>cumplió o superó lo planeado</span>
+      <span><i class="smfdot amarillo"></i>80-99% de lo planeado</span>
+      <span><i class="smfdot rojo"></i>menos del 80%</span>
+      <span><i class="plc-dim"></i>día futuro / sin plan ese día</span>
     </div>
     <div id="planDiarioBody"></div>
   </section>
@@ -1527,10 +1550,12 @@ function renderSede(base){
 }
 
 /* ---------- horarios pico por sucursal (hora de FECHA DE AGENDA, agregado 2026-08) ----------
-   Panel oculto si ninguna fila de la vista trae hora capturada. */
+   Solo cuenta asiste==='SI' (pedido explícito de Irvin, 2026-08-04: "solo toma en cuenta los
+   asiste") — horarios con más pacientes que de verdad llegaron, no solo agendados. Panel oculto si
+   ninguna fila de la vista trae hora+asiste=SI. */
 function horariosAgg(base){
   const m={};
-  for(const r of base){ if(!r.hora) continue;
+  for(const r of base){ if(!r.hora || r.asiste!=='SI') continue;
     const s=(m[r.sede]=m[r.sede]||{sede:r.sede,total:0,byHora:{}});
     s.total++; s.byHora[r.hora]=(s.byHora[r.hora]||0)+1; }
   return Object.values(m).map(s=>({...s,top:Object.entries(s.byHora).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([hora,n])=>({hora,n}))}));
@@ -1564,18 +1589,20 @@ function areaOf(esp){
   if(s.indexOf('QUIROPR')>=0) return 'Quiropráctica';
   return '';
 }
-/* Totales por sede y área — base para las alertas de desequilibrio (renderAreaAlerts). */
+/* Totales por sede y área — base para las alertas de desequilibrio (renderAreaAlerts). Solo cuenta
+   asiste==='SI' (pedido de Irvin, 2026-08-04): satura/vacía se mide por quién de verdad llegó, no
+   por quién quedó agendado. */
 function areaAgg(base){
   const m={};
-  for(const r of base){ const a=areaOf(r.especialidad); if(!a) continue;
+  for(const r of base){ const a=areaOf(r.especialidad); if(!a || r.asiste!=='SI') continue;
     const s=(m[r.sede]=m[r.sede]||{sede:r.sede,areas:{Acupuntura:0,Fisioterapia:0,'Quiropráctica':0},total:0});
     s.areas[a]++; s.total++; }
   return Object.values(m).map(s=>{ const t=tierOf(s.sede);
     return {...s,divLabel:t?t.label:'Otras',divColor:t?t.color:'#7F97A2'}; });
 }
-/* Sedes con volumen suficiente (≥6 citas con área capturada) donde el área con más citas triplica o
-   más a la de menos (o la de menos está en cero) — la señal concreta de "una saturada, otra vacía"
-   que Irvin quiere ver de inmediato para mover agenda. */
+/* Sedes con volumen suficiente (≥6 asistidas con área capturada) donde el área con más asistidas
+   triplica o más a la de menos (o la de menos está en cero) — la señal concreta de "una saturada,
+   otra vacía" que Irvin quiere ver de inmediato para mover agenda. */
 function areaImbalances(base){
   return areaAgg(selSedes(base)).filter(s=>s.total>=6).map(s=>{
     const entries=Object.entries(s.areas);
@@ -1588,7 +1615,7 @@ function areaImbalances(base){
 function renderAreaAlerts(base){
   const el=$('focosArea'); if(!el) return;
   const list=areaImbalances(base).slice(0,6);
-  const head=`<div class="focos-h">${ALERT_SVG}<h3>Desequilibrio de agenda por área · qué mover ya</h3><span class="sub">sedes con ≥6 citas de Acupuntura/Fisioterapia/Quiropráctica · más disparejo primero</span></div>`;
+  const head=`<div class="focos-h">${ALERT_SVG}<h3>Desequilibrio de agenda por área · qué mover ya</h3><span class="sub">sedes con ≥6 asistidas de Acupuntura/Fisioterapia/Quiropráctica · más disparejo primero</span></div>`;
   if(!list.length){
     el.innerHTML=head+`<div class="focos-ok">${OK_SVG}<span>Sin desequilibrios grandes en esta vista — Acupuntura, Fisioterapia y Quiropráctica están razonablemente parejas. Buen momento para mantenerlo así.</span></div>`;
     return;
@@ -1597,17 +1624,18 @@ function renderAreaAlerts(base){
     const col=AREA_COLOR[s.max[0]];
     return `<div class="foco" style="--fc:${col}">
       <div class="ft"><span class="fdot" style="background:${s.divColor}"></span><b title="${titleCase(s.sede)}">${titleCase(s.sede)}</b><span class="fdiv">${s.divLabel}</span></div>
-      <div class="fmetric"><span class="fv">${s.max[1]}</span><span class="fl">citas en ${s.max[0]}</span></div>
-      <div class="fwhy">${s.min[0]} casi vacía: ${s.min[1]} de ${s.total} citas con área · mueve leads/disponibilidad hacia ${s.min[0]}</div>
+      <div class="fmetric"><span class="fv">${s.max[1]}</span><span class="fl">asistieron a ${s.max[0]}</span></div>
+      <div class="fwhy">${s.min[0]} casi vacía: ${s.min[1]} de ${s.total} asistidas · mueve leads/disponibilidad hacia ${s.min[0]}</div>
     </div>`;
   }).join('')+`</div>`;
 }
 
 /* Heatmap horario (agrupado por hora, ej. "17:00") × área — mismo alcance/filtro que el resto del
-   dashboard (selSedes), así que si Irvin filtra a una sola sede ve el patrón de esa sede. */
+   dashboard (selSedes), así que si Irvin filtra a una sola sede ve el patrón de esa sede. Solo cuenta
+   asiste==='SI' (pedido de Irvin, 2026-08-04). */
 function horarioAreaAgg(base){
   const m={};
-  for(const r of base){ if(!r.hora) continue; const a=areaOf(r.especialidad); if(!a) continue;
+  for(const r of base){ if(!r.hora || r.asiste!=='SI') continue; const a=areaOf(r.especialidad); if(!a) continue;
     const h=r.hora.split(':')[0]+':00';
     const row=(m[h]=m[h]||{hora:h,areas:{Acupuntura:0,Fisioterapia:0,'Quiropráctica':0},total:0});
     row.areas[a]++; row.total++; }
@@ -1871,9 +1899,11 @@ function renderServicio(base){
    Columna nueva de BASE DE PACIENTES, agrupada por valor exacto (igual que servicio) — sin ASISTE
    por paciente disponible para estos canales, solo cuenta volumen de agendados (ver padAgg). Panel
    oculto si todavía no se ha capturado ninguna especialidad. */
+/* Solo cuenta asiste==='SI' (pedido de Irvin, 2026-08-04) — volumen de quien de verdad llegó a cada
+   área, no de agendados. */
 function especialidadAgg(base){
   const m={};
-  for(const r of base){ const a=areaOf(r.especialidad); if(!a) continue;
+  for(const r of base){ const a=areaOf(r.especialidad); if(!a || r.asiste!=='SI') continue;
     const s=(m[a]=m[a]||{especialidad:a,n:0});
     s.n++; }
   return Object.values(m);
@@ -1891,7 +1921,7 @@ function renderEspecialidad(base){
       <div class="ptrack">
         <div class="pfill tot" style="width:${s.n/maxN*100}%;background:${AREA_COLOR[s.especialidad]}"></div>
       </div>
-      <span class="pvv"><b>${s.n}</b> agend</span>
+      <span class="pvv"><b>${s.n}</b> asist</span>
     </div>`).join('');
 }
 
@@ -2225,6 +2255,11 @@ function buildPlanReal(){
   }
   return { plan, ci, realMap };
 }
+/* Rediseño 2026-08-04 (pedido de Irvin: "ponlo de manera diferente que se vea mejor y entendible")
+   — reemplaza la lista larga de una fila por día (hasta 31×3 filas, mucho scroll) por un calendario
+   compacto de 7 columnas por división: se ve todo el mes de un vistazo, verde/amarillo/rojo igual
+   que el semáforo del resto del dashboard. Mismo corte a día vencido de siempre (ci.diasTranscurridos,
+   ver monthCutoffInfo/buildPlanReal) — solo cambia cómo se dibuja, no la lógica de qué cuenta. */
 function renderPlanDiario(){
   const el=$('planDiarioBody'); if(!el) return;
   const pr=buildPlanReal();
@@ -2232,36 +2267,40 @@ function renderPlanDiario(){
   const { plan, ci, realMap } = pr;
   const order=['CORPORATIVO','FRANQUICIAS','TERCERIZADAS'];
   const labelOf={CORPORATIVO:'Corporativo',FRANQUICIAS:'Franquicias',TERCERIZADAS:'Tercerizadas'};
+  const WD=['L','M','M','J','V','S','D'];
+  const hoyReal=new Date(); const esMesHoy=hoyReal.getFullYear()===ci.y&&hoyReal.getMonth()===ci.m;
+  const firstDow=(new Date(ci.y,ci.m,1).getDay()+6)%7; // 0=lunes, igual que weekCutoffInfo
   let html='';
   for(const divKey of order){
     const sedes=plan[divKey]; if(!sedes) continue;
     const color=divColor(divKey);
-    const daySet=new Set();
-    for(const sede in sedes){ for(const day in sedes[sede]) daySet.add(+day); }
-    const days=[...daySet].sort((a,b)=>a-b);
     let sumPlanHoy=0, sumRealHoy=0;
-    const rowsHtml=days.map(day=>{
+    const cells=[];
+    for(let i=0;i<firstDow;i++) cells.push('<div class="plancell blank"></div>');
+    for(let day=1;day<=ci.diasDelMes;day++){
       let planeado=0, real=0;
       for(const sede in sedes){ planeado+=sedes[sede][day]||0; real+=(realMap[sede]&&realMap[sede][day])||0; }
       const esFuturo=day>ci.diasTranscurridos;
       if(!esFuturo){ sumPlanHoy+=planeado; sumRealHoy+=real; }
+      const sinPlan=!esFuturo&&planeado===0&&real===0;
       const ratio=planeado?real/planeado:(real>0?1:0);
-      const status=esFuturo?null:(ratio>=1?'verde':(ratio>=0.8?'amarillo':'rojo'));
-      const maxV=Math.max(planeado,real,1);
-      return `<div class="planrow${esFuturo?' futuro':''}">
-        <span class="pdday">Día ${day}</span>
-        <div class="ptrack">
-          <div class="pfill tot" style="width:${(planeado/maxV*100).toFixed(1)}%;background:${color};opacity:.35"></div>
-          ${!esFuturo?`<div class="pfill asis" style="width:${(real/maxV*100).toFixed(1)}%;background:${color}"></div>`:''}
-        </div>
-        <span class="pdvv">${esFuturo?`<i>${planeado} agendadas</i>`:`<b>${real}</b>/${planeado}`}${status?` <span class="smfdot ${status}"></span>`:''}</span>
-      </div>`;
-    }).join('');
+      const status=esFuturo?'futuro':(sinPlan?'sinplan':(ratio>=1?'verde':(ratio>=0.8?'amarillo':'rojo')));
+      const esHoy=esMesHoy&&day===hoyReal.getDate();
+      const main=esFuturo?planeado:(sinPlan?'—':real);
+      const sub=esFuturo?'planeadas':(sinPlan?'sin plan':`de ${planeado}`);
+      const tip=esFuturo?`Día ${day} · ${planeado} planeadas`:`Día ${day} · ${real} reales de ${planeado} planeadas`;
+      cells.push(`<div class="plancell ${status}${esHoy?' hoy':''}" title="${tip}">
+        <span class="pcday">${day}</span>
+        <span class="pcmain">${main}</span>
+        <span class="pcsub">${sub}</span>
+      </div>`);
+    }
     const deficit=sumRealHoy-sumPlanHoy;
     html += `<div class="panel-c" style="margin-bottom:16px">
       <div class="ph"><h3><span class="ddot" style="background:${color};display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:8px"></span>${labelOf[divKey]}</h3>
         <small>hasta hoy: <b>${sumRealHoy}</b> reales de <b>${sumPlanHoy}</b> planeadas (${deficit>=0?'+':''}${deficit})</small></div>
-      <div class="plandiario-rows">${rowsHtml || '<div class="empty">Sin días con datos.</div>'}</div>
+      <div class="plancal-head">${WD.map(d=>`<span>${d}</span>`).join('')}</div>
+      <div class="plancal">${cells.join('')}</div>
     </div>`;
   }
   el.innerHTML = html || '<div class="empty">Sin datos para esta vista.</div>';
