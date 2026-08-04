@@ -1880,24 +1880,28 @@ function renderPad(base){
 
 /* ---------- estado de citas (Asiste/No Asiste/Reservado, dato real por paciente vía columna ESTADO,
    agregado 2026-08-04, ver AGENTS.md §4/§5g) ----------
-   SIN DATO queda fuera de conDato (denominador de los %) — son filas sin estado capturado, no se
-   les puede asignar a ninguno de los 3 baldes. Panel oculto si conDato es 0. */
+   SIN DATO queda fuera de conDato — son filas sin estado capturado, no se les puede asignar a
+   ninguno de los 3 baldes. Panel oculto si conDato es 0.
+   % Asistencia (pedido explícito de Irvin, 2026-08-04: "deja fuera de este indicador las reservas")
+   = si/(si+no) — Reservado NO cuenta en el denominador, solo se compara contra lo ya resuelto
+   (ej. 100 resueltas con 50 asistieron = 50% asistencia, sin importar cuántas reservas haya aparte).
+   "En reserva" es la excepción: ese % sí es sobre conDato completo, porque describe qué fracción de
+   TODO lo agendado sigue sin resolver — no es un % de asistencia. */
 function estadoAgg(base){
   let si=0,no=0,pend=0;
   for(const r of base){ if(r.asiste==='SI') si++; else if(r.asiste==='NO') no++; else if(r.asiste==='PENDIENTE') pend++; }
-  const conDato=si+no+pend;
-  return {si,no,pend,conDato};
+  const conDato=si+no+pend, resuelto=si+no;
+  return {si,no,pend,conDato,resuelto,asisR:resuelto?si/resuelto:0};
 }
 function renderEstado(base){
   const panel=$('estadoPanel'); if(!panel) return;
   const e=estadoAgg(selSedes(base));
   if(!e.conDato){ panel.style.display='none'; return; }
   panel.style.display='';
-  const pctOf=(n)=>e.conDato?pct(n/e.conDato):'—';
   $('estadoRow').innerHTML=[
-    {pc:'#86DD57',l:'Asisten',v:e.si,m:`${pctOf(e.si)} de ${nf.format(e.conDato)} citas con estado`},
-    {pc:'#FB6B5B',l:'No asisten',v:e.no,m:`${pctOf(e.no)} de ${nf.format(e.conDato)} citas con estado`},
-    {pc:'#F5A524',l:'En reserva',v:e.pend,m:`${pctOf(e.pend)} de ${nf.format(e.conDato)} · próximas por resolver`},
+    {pc:'#86DD57',l:'Asisten',v:e.si,m:e.resuelto?`${pct(e.asisR)} de ${nf.format(e.resuelto)} resueltas (sin contar reservas)`:'sin citas resueltas todavía'},
+    {pc:'#FB6B5B',l:'No asisten',v:e.no,m:e.resuelto?`${pct(1-e.asisR)} de ${nf.format(e.resuelto)} resueltas (sin contar reservas)`:'sin citas resueltas todavía'},
+    {pc:'#F5A524',l:'En reserva',v:e.pend,m:`${pct(e.conDato?e.pend/e.conDato:0)} del total agendado · próximas por resolver`},
   ].map(c=>`<div class="padtop" style="--pc:${c.pc}"><div class="pl">${c.l}</div><div class="pv"><span class="dt"></span>${nf.format(c.v)}</div><div class="pm">${c.m}</div></div>`).join('');
 }
 
