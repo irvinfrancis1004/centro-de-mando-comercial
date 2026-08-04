@@ -641,6 +641,13 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
     </div>
   </div>
 
+  <!-- ESTADO DE CITAS (Asiste/No asiste/Reservado, dato real por paciente vía columna ESTADO —
+       oculto si la vista no trae ningún estado capturado) -->
+  <div class="panel-c" id="estadoPanel" style="display:none">
+    <div class="ph"><h3>Estado de citas</h3><small>dato real por paciente, columna ESTADO del Excel</small></div>
+    <div class="padtops" id="estadoRow"></div>
+  </div>
+
   <!-- SERVICIOS (solo aparece si la vista actual trae registros con "servicio", p.ej. Gerontología) -->
   <div class="panel-c" id="servicioPanel" style="display:none">
     <div class="ph"><h3>Por servicio</h3><small>agendados · efectivos</small></div>
@@ -694,6 +701,10 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
         <thead><tr>
           <th class="sortable" data-k="label">Padecimiento</th>
           <th class="sortable num" data-k="n">Agendados</th>
+          <th class="sortable num" data-k="si">Asiste</th>
+          <th class="sortable num" data-k="no">No asiste</th>
+          <th class="sortable num" data-k="pend">Reservado</th>
+          <th class="sortable num" data-k="asisR">% Asist.</th>
         </tr></thead>
         <tbody id="padTbody"></tbody>
       </table>
@@ -1069,6 +1080,9 @@ function render(){
 
   // padecimiento analytics
   renderPad(base);
+
+  // estado de citas (Asiste/No Asiste/Reservado, dato real por paciente)
+  renderEstado(base);
 
   // especialidad (Acupuntura/Fisioterapia/Quiropráctica — oculto si no hay datos capturados)
   renderEspecialidad(base);
@@ -1741,15 +1755,18 @@ function renderPadTag(){ const el=$('padTag'); if(!el) return;
   if(!state.padFilter){ el.innerHTML=''; return; }
   const g=PAD_BY_KEY[state.padFilter]||PAD_BY_KEY.OTRO;
   el.innerHTML = `<span class="padtag" style="border-color:${hexA(g.color,.4)}"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${g.color}"></span>${g.label}<button id="padTagX" title="Quitar filtro">×</button></span>`; }
-/* Ya no hay ASISTE por paciente (salvo GERONTOLOGIA, que no trae padecimiento) — padAgg solo puede
-   contar volumen de agendados por grupo, no efectividad (cambio 2026-08-01, ver AGENTS.md §4). nMes
-   cuenta lo del mes en curso (misma lógica de corte que monthCutoffInfo) para dar una señal de
-   "qué está subiendo ahora" ya que no hay % de asistencia que mostrar. */
+/* nMes cuenta lo del mes en curso (misma lógica de corte que monthCutoffInfo) para dar una señal de
+   "qué está subiendo ahora". Desde 2026-08-04 (columna ESTADO real en BASE DE PACIENTES, ver
+   AGENTS.md §4/§5g) padAgg también calcula efectividad por padecimiento: si/no/pend son conteos de
+   asiste==='SI'/'NO'/'PENDIENTE' (PENDIENTE = en reserva, aún sin resolver); asisR es asiste/(asiste+
+   no-asiste) — Reservado no cuenta en el denominador porque todavía no se sabe si van a llegar. */
 function padAgg(base){
   const ci=monthCutoffInfo();
-  const m={}; for(const g of PAD_GROUPS) m[g.key]={key:g.key,label:g.label,color:g.color,n:0,nMes:0};
-  for(const r of base){ const s=m[r.padGrp]||m.OTRO; s.n++; if(enMesActual(r,ci)) s.nMes++; }
-  return Object.values(m).filter(s=>s.n>0);
+  const m={}; for(const g of PAD_GROUPS) m[g.key]={key:g.key,label:g.label,color:g.color,n:0,nMes:0,si:0,no:0,pend:0};
+  for(const r of base){ const s=m[r.padGrp]||m.OTRO; s.n++; if(enMesActual(r,ci)) s.nMes++;
+    if(r.asiste==='SI') s.si++; else if(r.asiste==='NO') s.no++; else if(r.asiste==='PENDIENTE') s.pend++; }
+  return Object.values(m).filter(s=>s.n>0).map(s=>{ const resuelto=s.si+s.no;
+    return {...s, resuelto, asisR: resuelto?s.si/resuelto:0}; });
 }
 function renderPad(base){
   const agg=padAgg(selSedes(base));
@@ -1758,9 +1775,16 @@ function renderPad(base){
   const byN=[...agg].sort((a,b)=>b.n-a.n);
   const byNMes=[...agg].sort((a,b)=>b.nMes-a.nMes);
   const topN=byN[0], topM=byNMes[0];
+  // "más llegan"/"menos llegan": mejor y peor % de asistencia, solo entre padecimientos con
+  // suficiente volumen resuelto (≥5 asiste+no-asiste) para que no sea puro ruido de 1-2 citas.
+  const conVolumen=agg.filter(s=>s.resuelto>=5);
+  const bestR=conVolumen.length?[...conVolumen].sort((a,b)=>b.asisR-a.asisR)[0]:null;
+  const worstR=conVolumen.length?[...conVolumen].sort((a,b)=>a.asisR-b.asisR)[0]:null;
   tops.innerHTML = [
     {pc:topN.color,l:'Padecimiento más agendado',v:topN.label,m:`<b>${topN.n}</b> agendados en total`},
     ...(topM&&topM.nMes?[{pc:topM.color,l:'Más agendado este mes',v:topM.label,m:`<b>${topM.nMes}</b> agendados en el mes en curso`}]:[]),
+    ...(bestR?[{pc:'#86DD57',l:'Los que más llegan',v:bestR.label,m:`<b>${pct(bestR.asisR)}</b> asiste · ${bestR.resuelto} citas resueltas`}]:[]),
+    ...(worstR&&(!bestR||worstR.key!==bestR.key)?[{pc:'#FB6B5B',l:'Los que menos llegan',v:worstR.label,m:`<b>${pct(worstR.asisR)}</b> asiste · ${worstR.resuelto} citas resueltas`}]:[]),
   ].map(c=>`<div class="padtop" style="--pc:${c.pc}"><div class="pl">${c.l}</div><div class="pv"><span class="dt"></span>${c.v}</div><div class="pm">${c.m}</div></div>`).join('');
   const maxN=Math.max(1,...byN.map(s=>s.n));
   $('padBars').innerHTML = byN.map(s=>`
@@ -1778,6 +1802,10 @@ function renderPad(base){
     <tr data-pad="${s.key}" style="cursor:pointer">
       <td>${padBadge(s.key,false)}</td>
       <td class="num mono">${s.n}</td>
+      <td class="num mono">${s.si}</td>
+      <td class="num mono">${s.no}</td>
+      <td class="num mono">${s.pend}</td>
+      <td class="num">${s.resuelto?pctCell(s.asisR,[.65,.5]):'<span class="t-zero">—</span>'}</td>
     </tr>`).join('');
   document.querySelectorAll('#padTable thead th').forEach(th=>{
     th.classList.toggle('act',th.dataset.k===k.k);
@@ -1785,6 +1813,29 @@ function renderPad(base){
     if(th.dataset.k===k.k){ const sp=document.createElement('span'); sp.className='ar'; sp.textContent=k.dir<0?'▼':'▲'; th.appendChild(sp); }
     else if(th.classList.contains('sortable')){ const sp=document.createElement('span'); sp.className='ar'; sp.textContent='▼'; th.appendChild(sp); }
   });
+}
+
+/* ---------- estado de citas (Asiste/No Asiste/Reservado, dato real por paciente vía columna ESTADO,
+   agregado 2026-08-04, ver AGENTS.md §4/§5g) ----------
+   SIN DATO queda fuera de conDato (denominador de los %) — son filas sin estado capturado, no se
+   les puede asignar a ninguno de los 3 baldes. Panel oculto si conDato es 0. */
+function estadoAgg(base){
+  let si=0,no=0,pend=0;
+  for(const r of base){ if(r.asiste==='SI') si++; else if(r.asiste==='NO') no++; else if(r.asiste==='PENDIENTE') pend++; }
+  const conDato=si+no+pend;
+  return {si,no,pend,conDato};
+}
+function renderEstado(base){
+  const panel=$('estadoPanel'); if(!panel) return;
+  const e=estadoAgg(selSedes(base));
+  if(!e.conDato){ panel.style.display='none'; return; }
+  panel.style.display='';
+  const pctOf=(n)=>e.conDato?pct(n/e.conDato):'—';
+  $('estadoRow').innerHTML=[
+    {pc:'#86DD57',l:'Asisten',v:e.si,m:`${pctOf(e.si)} de ${nf.format(e.conDato)} citas con estado`},
+    {pc:'#FB6B5B',l:'No asisten',v:e.no,m:`${pctOf(e.no)} de ${nf.format(e.conDato)} citas con estado`},
+    {pc:'#F5A524',l:'En reserva',v:e.pend,m:`${pctOf(e.pend)} de ${nf.format(e.conDato)} · próximas por resolver`},
+  ].map(c=>`<div class="padtop" style="--pc:${c.pc}"><div class="pl">${c.l}</div><div class="pv"><span class="dt"></span>${nf.format(c.v)}</div><div class="pm">${c.m}</div></div>`).join('');
 }
 
 /* ---------- por servicio (Gerontología y futuros canales con columna SERVICIO) ----------
@@ -1950,30 +2001,55 @@ function detectCanalFromPad(pad){
   if(/ORGANIC/.test(s)) return 'ORGANICO';
   return 'FACEBOOK';
 }
-function extractPatientRows(rows,canalFor){
+/* ESTADO (2026-08-04, columna nativa del sistema de reservas): 6 valores reales, Irvin solo
+   distingue 3 (Asiste/No Asiste/Reservado) — Confirmado/En Espera/Pendiente se agrupan con
+   Reservado (decisión explícita 2026-08-04). Mismo vocabulario SI/NO/PENDIENTE/SIN DATO de
+   siempre (ver AGENTS.md §4), así PENDIENTE == "en reserva" en todos los chips/filtros. */
+function estadoToAsiste(v){
+  const s=String(v||'').trim().toUpperCase();
+  if(s==='ASISTE') return 'SI';
+  if(s==='NO ASISTE') return 'NO';
+  if(s==='RESERVADO'||s==='CONFIRMADO'||s==='EN ESPERA'||s==='PENDIENTE') return 'PENDIENTE';
+  return 'SIN DATO';
+}
+/* opts.especialidadFromServicio: la hoja "BASE DE PACIENTES" viene del sistema de reservas con sus
+   encabezados nativos ("Local","Servicio","Estado","Comentario interno"...). Su "Servicio" es lo que
+   aquí llamamos `especialidad`, distinto del `servicio` de GERONTOLOGIA (su propia hoja) — con esta
+   opción activa, `servicio` se deja sin usar (-1) para no leer esa columna 2 veces. */
+function extractPatientRows(rows,canalFor,opts){
+  opts=opts||{};
   const out=[];
   if(!rows.length) return out;
   let hr=-1;
   for(let i=0;i<Math.min(rows.length,6);i++){ if(rows[i].some(c=>c!=null&&/NOMBRE/i.test(String(c)))){hr=i;break;} }
   if(hr<0) hr=0;
   const head=rows[hr].map(c=>c==null?'':String(c).trim().toUpperCase());
-  const col=(...keys)=>{ for(const k of keys){ const idx=head.findIndex(h=>h.includes(k)); if(idx>=0) return idx; } return -1; };
-  const ci={ nom:col('NOMBRE'),ape:col('APELLIDO'),num:col('NUMERO','NÚMERO'),fec:col('FECHA DE AGENDA','AGENDA'),
-    sede:col('SEDE','SUCURSAL'),asis:col('ASISTE'),especialidad:col('ESPECIALIDAD'),pad:col('PADECIMIENTO'),servicio:col('SERVICIO') };
+  /* exacto primero, substring como respaldo (evita que "PRESTADOR" gane por accidente contra
+     "ESTADO" en la búsqueda por substring, pr-ESTADO-r — bug real encontrado 2026-08-04) */
+  const col=(...keys)=>{ for(const k of keys){ const idx=head.indexOf(k); if(idx>=0) return idx; }
+    for(const k of keys){ const idx=head.findIndex(h=>h.includes(k)); if(idx>=0) return idx; } return -1; };
+  const ci={ nom:col('NOMBRE'),ape:col('APELLIDO'),num:col('NUMERO','NÚMERO','TELEFONO','TELÉFONO'),
+    fec:col('FECHA DE AGENDA','AGENDA','FECHA DE REALIZACION','FECHA DE REALIZACIÓN'),
+    sede:col('SEDE','SUCURSAL','LOCAL'),asis:col('ASISTE'),estado:col('ESTADO'),
+    especialidad:opts.especialidadFromServicio?col('ESPECIALIDAD','SERVICIO'):col('ESPECIALIDAD'),
+    pad:col('PADECIMIENTO','COMENTARIO INTERNO'),
+    servicio:opts.especialidadFromServicio?-1:col('SERVICIO') };
   for(let i=hr+1;i<rows.length;i++){
     const row=rows[i]; const nm=ci.nom>=0?row[ci.nom]:null;
     if(nm==null||String(nm).trim()==='') continue;
     const ape=ci.ape>=0&&row[ci.ape]!=null?String(row[ci.ape]).trim():'';
     const padecimiento=ci.pad>=0&&row[ci.pad]!=null?String(row[ci.pad]).replace(/\\n/g,'\n'):'';
     const fechaRaw=ci.fec>=0?row[ci.fec]:null;
+    const asiste = ci.estado>=0&&row[ci.estado]!=null
+      ? estadoToAsiste(row[ci.estado])
+      : (ci.asis>=0&&row[ci.asis]!=null?String(row[ci.asis]).trim().toUpperCase():'SIN DATO');
     out.push({ canal:canalFor(padecimiento),
       nombre:ape?(String(nm).trim()+' '+ape):String(nm).trim(),
       numero:ci.num>=0&&row[ci.num]!=null?String(row[ci.num]).trim():'',
       fecha:asISO(fechaRaw),
       hora:asHora(fechaRaw),
       sede:normSede(ci.sede>=0?row[ci.sede]:null),
-      /* ASISTE ya no existe en BASE DE PACIENTES (desde 2026-08) — solo BASE DE GERONTOLOGIA lo trae real */
-      asiste:ci.asis>=0&&row[ci.asis]!=null?String(row[ci.asis]).trim().toUpperCase():'SIN DATO',
+      asiste,
       especialidad:ci.especialidad>=0&&row[ci.especialidad]!=null?String(row[ci.especialidad]).trim():'',
       padecimiento,
       servicio:ci.servicio>=0&&row[ci.servicio]!=null?String(row[ci.servicio]).trim():'' });
@@ -1986,7 +2062,7 @@ function parseWorkbook(wb){
   const unifiedName=wb.SheetNames.find(n=>/^\s*BASE DE PACIENTES\s*$/i.test(n));
   if(unifiedName){
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[unifiedName],{header:1,defval:null,raw:true,blankrows:false});
-    out=extractPatientRows(rows,detectCanalFromPad);
+    out=extractPatientRows(rows,detectCanalFromPad,{especialidadFromServicio:true});
   } else {
     /* formato viejo: una hoja "BASE DE PACIENTES ... <CANAL>" por canal */
     const map=[
