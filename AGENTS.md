@@ -133,19 +133,25 @@ padGrp           string — se agrega en runtime (annotatePad) con el clasificad
 |------------|----------------------------------------------|
 | Lead       | cada fila (`recs.length`), o leads reales de `adspend.dat` cuando hay (ver §5c) |
 | Agendado   | fila con `fecha` (helper `hasCita`)          |
-| Efectivo   | GERONTOLOGIA: `asiste === 'SI'` por fila · resto: Asistidos corregido por sucursal (ver §5c "Asistidos corregido") |
+| Efectivo   | `asiste === 'SI'` por fila, en TODOS los canales (ver §5h) |
 
-Tasas: **agendamiento** = agendados/leads · **asistencia** = efectivos/agendados · **conversión** =
-efectivos/leads (lead que se vuelve paciente que sí llegó).
+Tasas: **agendamiento** = agendados/leads · **conversión** = efectivos/leads (lead que se vuelve
+paciente que sí llegó) · **asistencia** = efectivos/(efectivos+no-asiste) — **no** efectivos/agendados;
+Reservado/Pendiente/Sin dato quedan fuera del denominador (petición explícita de Irvin, 2026-08-04:
+"deja fuera de este indicador de asistencia las reservas").
 
-> **Nota (2026-08-04):** desde que BASE DE PACIENTES trae `asiste` real (columna ESTADO, ver §5h), el
-> embudo/KPIs **siguen** usando el Asistidos corregido de §5c para "Efectivo" en los 4 canales de
-> marketing — no se cambió esa definición a propósito (decisión no pedida, fuera de alcance de lo que
-> se pidió ese día). El nuevo `asiste` real por fila se usa aparte, en el panel "Estado de citas"
-> (Resumen) y en `padAgg` (Padecimientos) — sus números pueden NO cuadrar exactos con "Efectivos" del
-> embudo porque son 2 fuentes/metodologías distintas. Si algún día se quiere unificar (usar el
-> `asiste` real como fuente única de "Efectivo" también en el embudo), es un cambio de diseño
-> deliberado que hay que confirmar con Irvin primero, no asumirlo.
+> **Historial (superado 2026-08-04):** entre el 2026-08-01 (BASE DE PACIENTES perdió su columna ASISTE
+> propia) y el 2026-08-04 (llegó la columna ESTADO real, ver §5h), "Efectivo" para los 4 canales de
+> marketing usaba el Asistidos corregido agregado de la hoja Facebook (§5c) en vez de un dato real por
+> fila — no había otra opción entonces. Con ESTADO real ya no hace falta: `kpis()`, `sedeAgg()` y
+> `divAgg()` calculan "Efectivo"/"% Asistencia" directo de `asiste` por fila en todos los canales,
+> **igual que GERONTOLOGIA siempre lo hizo**. Petición explícita de Irvin, 2026-08-04: "cambiar TODO
+> el dashboard a la fórmula real" — esto mueve CAC, Conversión, Meta del mes y el semáforo de sedes,
+> no solo la dona de Resumen, a propósito. `realAsistidosView()` y `sedeAsistidos()` (las funciones
+> que leían el agregado corregido) se borraron por quedar sin uso — si hace falta recuperarlas, están
+> en el historial de git antes de este cambio. El agregado corregido (`bySedeAsistidos`/
+> `FACEBOOK.bySede[sede].asistidos`) se sigue calculando en `excel_to_dat.js`/`adspend.dat` (no se
+> quitó esa parte, por si se necesita comparar), pero ya nada en el dashboard lo lee.
 
 > **Cambio 2026-08-01 (petición de Irvin):** el dashboard ya no muestra la etapa "Plan" (aperturación
 > de tratamiento) ni la tasa de "cierre" (planes/efectivos), ni ninguna cifra de dinero (ticket
@@ -270,16 +276,13 @@ conteo de agendados sigue siendo por fila de `BASE DE PACIENTES` (`agendCount`/`
 corrige con este mecanismo. **`GERONTOLOGIA` no participa** de esta corrección (no tiene desglose de
 Facebook, sigue con `ASISTE` real por paciente, ver §5d).
 
-En el dashboard, `realAsistidosView(canal, sedeSet)` (dashboard_template.html, mirror de
-`adspendView`) suma `ADSPEND.FACEBOOK.bySede[sede].asistidos` (ya corregido) +
-`ADSPEND[canal].bySedeAsistidos[sede]` para los otros 3 canales — a diferencia de `adspendView`,
-esto SÍ es preciso por sucursal incluso para los canales sin desglose propio en el Excel (viene de
-clasificar cada paciente, no de un agregado de toda la red), así que no necesita el `omitido`/aviso
-que sí aplica a leads/gasto. `render()` pasa el resultado como 3er parámetro de `kpis(recs, realLeads,
-realAsistidos)` — `null` cuando `state.canal==='GERONTOLOGIA'`, para que `kpis()` caiga a contar
-`asiste==='SI'` por fila en ese caso. `sedeAgg(base)` usa el mismo criterio por sucursal vía
-`sedeAsistidos(sede, canalRows)` (mirror de `sedeRealLeads`), decidiendo por grupo de sede si hay
-`GERONTOLOGIA` en `_canalRows` (en cuyo caso cuenta por fila) o no (usa el agregado corregido).
+> **Superado 2026-08-04:** el dashboard tenía `realAsistidosView(canal, sedeSet)` y
+> `sedeAsistidos(sede, canalRows)` para leer este agregado corregido y pasárselo a `kpis()`/`sedeAgg()`
+> como "Efectivos" — se borraron porque ya no se usan (ver la nota de §4). `bySedeAsistidos`/
+> `FACEBOOK.bySede[sede].asistidos` se siguen calculando en `excel_to_dat.js` (no se tocó esa parte,
+> por si hace falta comparar contra el agregado de Facebook), pero nada en `dashboard_template.html`
+> los lee ya. Si se necesita recuperar esas funciones, están en el historial de git antes de ese
+> cambio.
 
 **Actualizado 2026-07-02:** el botón "Subir Excel" del navegador **también** parsea presupuesto
 ahora — `extractAdSpendBrowser(wb)` (dashboard_template.html) es una copia funcional de
@@ -323,19 +326,17 @@ otros 3 canales siempre es el agregado del canal completo (no hay desglose que f
 > sin desglose por sede; si la sede no tiene ningún registro de Facebook, cae de vuelta al conteo
 > de filas. Esto alimenta la tabla de Sucursales (columnas Leads/% Agend).
 
-**Proyección de fin de mes** (`monthProjection(recs, efectivosAgregados)`): usa **"día vencido"**
-como corte — el último día ya completo (ayer), NO el día en curso. **Historia:** el 2026-07-01 Irvin
-dijo que llena `FECHA DE AGENDA` día a día al finalizar el día, así que se usó "hoy cuenta completo"
-(sin restar un día). El 2026-07-07 pidió explícitamente el cambio a día vencido — no quiere que el
-día en curso (todavía incompleto) cuente como si ya hubiera cerrado. `monthCutoffInfo()` (§5d) hace
-`cutoff = hoy - 1 día`; si hoy es el día 1 del mes, el corte cae en el último día del mes anterior
-(caso límite ya contemplado, no es un bug). "Agendados" cuenta filas del mes en curso hasta el corte
-(sigue siendo por fila, `enMesActual`); "Efectivos" desde 2026-08-01 usa `efectivosAgregados`
-(el `k.efectivos` del scope actual, ver "Asistidos corregido" arriba) porque ya no hay forma de
-filtrar asistencia por día — el agregado de `ASISTIDOS` no trae fecha, se trata como acumulado del
-periodo (igual que `LEADS`); `null` para GERONTOLOGIA, que cae de vuelta a contar `asiste==='SI'`
-por fila y mes como antes. Cada tasa saca el ritmo diario (`total/díasTranscurridos`) y proyecta a
-fin de mes (`ritmo × díasDelMes`, usando `daysInMonth()` real del mes — 31 para julio, no
+**Proyección de fin de mes** (`monthProjection(recs)`): usa **"día vencido"** como corte — el último
+día ya completo (ayer), NO el día en curso. **Historia:** el 2026-07-01 Irvin dijo que llena `FECHA
+DE AGENDA` día a día al finalizar el día, así que se usó "hoy cuenta completo" (sin restar un día).
+El 2026-07-07 pidió explícitamente el cambio a día vencido — no quiere que el día en curso (todavía
+incompleto) cuente como si ya hubiera cerrado. `monthCutoffInfo()` (§5d) hace `cutoff = hoy - 1 día`;
+si hoy es el día 1 del mes, el corte cae en el último día del mes anterior (caso límite ya
+contemplado, no es un bug). "Agendados" y "Efectivos" cuentan filas del mes en curso hasta el corte
+(`enMesActual`) — ambos por fila desde 2026-08-04 (`asiste==='SI'`, ver §4/§5h), ya no hace falta el
+parámetro `efectivosAgregados` que existía cuando "Efectivos" para marketing venía de un agregado sin
+fecha (se quitó de la firma de la función). Cada tasa saca el ritmo diario (`total/díasTranscurridos`)
+y proyecta a fin de mes (`ritmo × díasDelMes`, usando `daysInMonth()` real del mes — 31 para julio, no
 hardcodeado). Se muestra en la pestaña **Presupuesto**, debajo de las tarjetas de leads/CAC — desde
 2026-08-01 solo se pintan las tarjetas de agendados/efectivos (las de "planes" se quitaron junto con
 el resto del tema de cierre de planes, ver §4 — ese concepto ya ni se calcula, a diferencia del
@@ -367,24 +368,23 @@ distinta a las demás:
   PACIENTES`). Columnas: `NOMBRE`, `APELLIDO`, `NUMERO`, `FECHA DE AGENDA`, `SUCURSAL` (alias de
   `SEDE`, `col('SEDE','SUCURSAL')` ya lo cubre — desde 2026-08 trae sucursales reales, ya no cae
   siempre en `'SIN SEDE'`), **`SERVICIO`** (ej. `"Consulta Inicial Gerontologia"`,
-  `"Clase baile gerontología"`) en vez de `PADECIMIENTO`, y **`ASISTE`** — es el único canal que
-  sigue trayendo asistencia real por paciente (ver §4/§5c "Asistidos corregido", que no aplica aquí).
-  Desde 2026-08 ya no trae `COSTO INICIAL`/`PLAN`/`MONTO`/`CXC` (igual que el resto, ver §4).
+  `"Clase baile gerontología"`) en vez de `PADECIMIENTO`, y **`ASISTE`** — trae su propia columna
+  literal (distinta de `ESTADO`, que es de BASE DE PACIENTES, ver §5h), pero desde 2026-08-04 ya no
+  es el único canal con asistencia real por fila: los 4 canales de marketing también la tienen, vía
+  `ESTADO` (§5h). `Asistidos corregido` (más abajo en esta sección) es un mecanismo histórico que ya
+  no usa el dashboard (ver §4).
 - **`GERONTOLOGIA`**: hoja de presupuesto agregado (`LEADS`/`PRESUPUESTO`), mismo patrón que
-  `PROMOCIONES`/`GOOGLE`/`ORGANICO` — sin desglose por sucursal, así que no puede alimentar el
-  Asistidos corregido de las demás (ver §5c); Gerontología no participa de esa corrección.
+  `PROMOCIONES`/`GOOGLE`/`ORGANICO` — sin desglose por sucursal.
 
 `parseWorkbook` (excel_to_dat.js y dashboard_template.html) busca `BASE DE.*GERONTOLOG` **siempre**,
 sin importar si el archivo usa el formato unificado o el viejo por canal — es una hoja adicional,
 independiente, con canal fijo `'GERONTOLOGIA'` para todas sus filas (no se detecta por texto).
 
-> **Gerontología es el único canal con `ASISTE` real por paciente (desde 2026-08-01):** `kpis()`,
-> `sedeAgg()` y `monthProjection()` ramifican explícitamente por esto — para `state.canal===
-> 'GERONTOLOGIA'` cuentan `asiste==='SI'` por fila (como todo el dashboard hacía antes de este
-> cambio); para el resto usan el Asistidos agregado corregido (ver §5c). En `sedeAgg`, la decisión es
-> por grupo de sede: si `_canalRows.GERONTOLOGIA` está presente en ese grupo, usa conteo por fila —
-> en la práctica nunca se mezcla con otro canal en la misma vista porque `recsForCanal` ya filtra a
-> un canal a la vez (Consolidado excluye Gerontología, ver más abajo).
+> **Superado 2026-08-04:** entre 2026-08-01 y 2026-08-04, Gerontología era el único canal con `ASISTE`
+> real por paciente y `kpis()`/`sedeAgg()`/`monthProjection()` ramificaban explícitamente por eso
+> (`state.canal==='GERONTOLOGIA'` → contar por fila; el resto → Asistidos agregado corregido, §5c).
+> Con `ESTADO` real en BASE DE PACIENTES (§5h) las 3 funciones ya no ramifican — cuentan `asiste==='SI'`
+> por fila siempre, en cualquier canal (ver §4).
 
 **Campo nuevo `servicio`** (string, `''` por default en los demás canales): se agrega a todo
 registro vía `col('SERVICIO')` en `extractPatientRows`. A diferencia de `padecimiento` (texto libre
@@ -583,12 +583,17 @@ llenando `servicio` normal.
   llegar). Tarjetas nuevas en `padTops`: **"Los que más llegan"** / **"Los que menos llegan"** (mejor/
   peor `asisR`, solo entre padecimientos con ≥5 citas resueltas, para no rankear por 1-2 citas de
   ruido). Tabla de padecimientos con columnas nuevas: Asiste/No asiste/Reservado/% Asist.
-- **Panel "Estado de citas"** (`estadoAgg`/`renderEstado`, pestaña Resumen, panel `#estadoPanel`,
-  debajo de "Pacientes por sucursal"/dona): 3 tarjetas (Asisten/No asisten/En reserva) con conteo y %
-  sobre el total con estado capturado (`conDato`, excluye `SIN DATO`). Oculto si `conDato` es 0.
-  **Importante:** esto usa `asiste` real por fila, **no** el mismo número que "Efectivos" del embudo/
-  KPIs (que sigue usando el Asistidos corregido de §5c) — ver la nota en §4, pueden no cuadrar exacto
-  entre sí a propósito.
+- **Panel "Estado de citas"** (`estadoAgg`/`estadoPorSede`/`renderEstado`, pestaña Resumen, panel
+  `#estadoPanel`, debajo de "Pacientes por sucursal"/dona): 3 tarjetas (Asisten/No asisten/En
+  reserva) + tabla por sucursal debajo (`#estadoSedeTable`, pre-ordenada por volumen resuelto
+  desc, sin click-to-sort — mismo patrón simple que `#horariosTable`). % Asistencia (tarjetas Asisten/
+  No asisten) = `si/(si+no)` — Reservado/Pendiente quedan fuera del denominador (pedido explícito de
+  Irvin, 2026-08-04: "deja fuera de este indicador de asistencia las reservas"). "En reserva" es la
+  excepción: su % sí es sobre `conDato` completo (`si+no+pend`, sin `SIN DATO`), porque describe qué
+  fracción de todo lo agendado sigue sin resolver, no una tasa de asistencia. Panel oculto si
+  `conDato` es 0. **Desde 2026-08-04 esto ya es exactamente el mismo número
+  que "Efectivos"/"% Asistencia" del embudo y KPIs** (ver la nota en §4) — antes (2026-08-01 al
+  2026-08-04) usaban fuentes distintas y podían no cuadrar; eso ya no aplica.
 
 ## 6. Divisiones (tiers) — array `TIERS`
 
@@ -622,17 +627,17 @@ Todo el JS está en el único `<script>` del final. Funciones clave:
 - `hasCita(r)`, `agendCount(recs)`
 
 **KPIs y agregados**
-- `kpis(recs, realLeads?, realAsistidos?)` → objeto con leads, agendados, efectivos, tasas. `realLeads`
-  (de `adspendView`) reemplaza `recs.length` como leads cuando hay dato real; `realAsistidos` (de
-  `realAsistidosView`, ver §5c) reemplaza el conteo por fila como efectivos — `null` para
-  GERONTOLOGIA, que cae a contar `asiste==='SI'` por fila (ver §5d).
-- `realAsistidosView(canal,sedeSet)` (§5c) / `sedeRealLeads(sede,canalRows)` (§5c, leads) /
-  `sedeAsistidos(sede,canalRows)` (§5c, efectivos) → mirrors de `adspendView` para asistidos
-  corregidos, red completa y por sucursal respectivamente.
+- `kpis(recs, realLeads?)` → objeto con leads, agendados, efectivos, tasas. `realLeads` (de
+  `adspendView`) reemplaza `recs.length` como leads cuando hay dato real. `efectivos`/`no` salen de
+  `asiste==='SI'`/`'NO'` por fila (real en todos los canales desde 2026-08-04, ver §4/§5h); `asisR` =
+  `efectivos/(efectivos+no)`, sin contar reservas/pendientes/sin dato en el denominador.
+- `sedeRealLeads(sede,canalRows)` (§5c) → mirror de `adspendView` para leads reales por sucursal
+  (sigue usando el desglose de Facebook — esto no cambió, solo "Efectivos" dejó de usar el agregado).
 - `sedeAgg(base)` → agrega por sede (+ divKey, salud-inputs); usa `sedeRealLeads` para `leads` y
-  `sedeAsistidos` para `asis` (GERONTOLOGIA por fila, resto agregado corregido, ver §5c/§5d); usa
-  `sedeMetaInfo` para meta/ritmo/déficit/proyección del mes (ver §8b)
-- `divAgg(rows)` → subtotales por división (incluye meta/proyección agregadas)
+  cuenta `asis`/`no` por fila directo (ya no hay ramal por canal, ver §4); usa `sedeMetaInfo` para
+  meta/ritmo/déficit/proyección del mes (ver §8b)
+- `divAgg(rows)` → subtotales por división (incluye meta/proyección agregadas; `asisR` recalculado
+  de `asis+no` sumados, no promedio de los `asisR` de cada sede)
 - `salud(s)` → semáforo (score 0-100 + status + métrica más débil). Metas en `TARGETS`.
 - `monthCutoffInfo()` / `enMesActual(r,ci)` → corte compartido del mes en curso (a día vencido),
   usado por `monthProjection`, la meta de sucursal y `padAgg` (nMes, ver §5g)
@@ -698,8 +703,8 @@ trae por sucursal; sedes sin ese dato muestran `—` en vez de un semáforo). La
 ```
 ritmoNecesario = meta / díasDelMes
 esperadoHoy    = ritmoNecesario × díasTranscurridos   // lo que le tocaría llevar HOY, no la meta total
-lleva          = Asistidos corregido de la sucursal (sedeAgg → s.asis, ver §5c) — GERONTOLOGIA sigue
-                 contando asiste==='SI' por fila (§5d), el resto usa el agregado ya corregido.
+lleva          = asiste==='SI' reales de la sucursal (sedeAgg → s.asis, ver §4/§5h) — mismo dato en
+                 todos los canales desde 2026-08-04, ya no hay ramal GERONTOLOGIA vs. resto.
 déficit        = lleva − esperadoHoy                  // negativo = va atrasado respecto al ritmo
 ritmoActual    = lleva / díasTranscurridos
 proyección     = round(ritmoActual × díasDelMes)
@@ -709,7 +714,9 @@ semáforo       = metaRatio>=1 ? verde : metaRatio>=0.8 ? amarillo : rojo
 
 > **Cambio 2026-08-01:** antes `lleva` filtraba "asistió Y pagó su consulta inicial"
 > (`costo_pago>0`, regla de Irvin 2026-07-06) — ese pago ya no existe en el Excel (ver §4), así que
-> la meta ahora cuenta el Asistidos corregido completo, sin filtro de pago.
+> la meta cuenta todos los `asiste==='SI'`, sin filtro de pago. **Cambio 2026-08-04:** la fuente de
+> `asiste` pasó del Asistidos corregido agregado (§5c) a la columna ESTADO real por fila (§5h) —
+> mismo criterio "sin filtro de pago", solo cambió de dónde sale el dato.
 
 **Por qué el déficit es contra "lo esperado a hoy" y no contra la meta total:** así se ve quién va
 mal *ahora*, a mitad de mes, en vez de que todas las sucursales salgan "en déficit" simplemente
