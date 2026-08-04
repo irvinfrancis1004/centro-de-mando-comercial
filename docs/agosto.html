@@ -687,6 +687,18 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   <div class="panel-c" id="estadoPanel" style="display:none">
     <div class="ph"><h3>Estado de citas</h3><small>dato real por paciente, columna ESTADO del Excel</small></div>
     <div class="padtops" id="estadoRow"></div>
+    <div class="tscroll" style="margin-top:16px">
+      <table id="estadoSedeTable">
+        <thead><tr>
+          <th>Sucursal</th>
+          <th class="num">Asiste</th>
+          <th class="num">No asiste</th>
+          <th class="num">Reservado</th>
+          <th class="num">% Asist.</th>
+        </tr></thead>
+        <tbody id="estadoSedeTbody"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- SERVICIOS (solo aparece si la vista actual trae registros con "servicio", p.ej. Gerontología) -->
@@ -703,7 +715,7 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   <div class="tblpanel">
     <div class="th-bar">
       <h3>Resumen por sucursal</h3>
-      <span class="hint">Agrupado por división · clic en encabezados para ordenar dentro de cada grupo · "Meta del mes" usa los Asistidos reales corregidos por canal</span>
+      <span class="hint">Agrupado por división · clic en encabezados para ordenar dentro de cada grupo · Efectivos/% Asist. es asiste real por paciente (columna ESTADO), sin contar reservas</span>
     </div>
     <div class="tscroll">
       <table id="sedeTable">
@@ -1076,19 +1088,23 @@ function detectMirrors(){
    realLeads (opcional): leads reales de la hoja de pauta (adspendView) para el canal/sede
    seleccionados. Si se pasa (>0), reemplaza el conteo de filas como denominador de leads —
    así "agendamiento" deja de ser siempre 100% y refleja el embudo real. Ver AGENTS.md §5c. */
-/* realAsistidos: asistidos reales agregados por sucursal (Facebook corregido + reasignado a otros
-   canales, ver realAsistidosView) — reemplaza el conteo por fila de ASISTE, que ya no existe en
-   BASE DE PACIENTES desde 2026-08 (solo GERONTOLOGIA lo sigue trayendo real; ahí realAsistidos viene
-   null y se usa el conteo por fila, ver render()). */
-function kpis(recs,realLeads,realAsistidos){
+/* Efectivos/No/% Asistencia salen del ESTADO real por paciente desde 2026-08-04 (columna ESTADO en
+   BASE DE PACIENTES, ver AGENTS.md §4/§5h) — ya NO del Asistidos corregido agregado de la hoja
+   Facebook (§5c), que se usaba antes porque no había dato real por fila para los 4 canales de
+   marketing. Petición explícita de Irvin (2026-08-04, "cambiar TODO el dashboard a la fórmula real"):
+   asisR = efectivos/(efectivos+no) — Reservado/Pendiente/Sin dato NO cuentan en el denominador,
+   solo lo ya resuelto (mismo criterio que padAgg/estadoAgg). Esto mueve CAC, Conversión, Meta del
+   mes y el semáforo de sedes, no solo la dona de Resumen — es a propósito. */
+function kpis(recs,realLeads){
   const leads=(realLeads && realLeads>0)?realLeads:recs.length;
   const agendados=agendCount(recs);
+  const efectivos=recs.filter(r=>r.asiste==='SI').length;
   const no=recs.filter(r=>r.asiste==='NO').length;
-  const efectivos=(realAsistidos!=null)?realAsistidos:recs.filter(r=>r.asiste==='SI').length;
-  const pend=Math.max(agendados-efectivos-no,0);
+  const pend=Math.max(agendados-efectivos-no,0); // reservas + sin dato, residual sobre agendados
+  const resuelto=efectivos+no;
   return { N:leads, leads, agendados, efectivos, no, pend,
     schedR: leads?agendados/leads:0, efxLeads: leads?efectivos/leads:0,
-    asisR: agendados?efectivos/agendados:0 };
+    asisR: resuelto?efectivos/resuelto:0 };
 }
 
 /* ---------- animated number ---------- */
@@ -1109,10 +1125,7 @@ function render(){
   const base = recsForCanal(state.canal);
   const recs = selSedes(base);
   const av = adspendView(state.canal,state.sedes);
-  // Gerontología es el único canal que aún trae ASISTE real por paciente (ver AGENTS.md §4) — para
-  // ese canal kpis() cae a contar por fila; para el resto se usa el Asistidos corregido por sucursal.
-  const realAsis = state.canal==='GERONTOLOGIA' ? null : realAsistidosView(state.canal,state.sedes).asistidos;
-  const k = kpis(recs,av.leads,realAsis);
+  const k = kpis(recs,av.leads);
 
   // scope
   const cName = state.canal==='TODOS'?'Consolidado':(state.canal.charAt(0)+state.canal.slice(1).toLowerCase());
@@ -1251,29 +1264,6 @@ function adspendView(canal,sedeSet){
   }
   return { leads, gastado, cpl: leads?gastado/leads:0, bySedeAvailable, omitido };
 }
-/* Asistidos reales por sucursal — Facebook corregido (bySede[sede].asistidos, ya restó a los
-   pacientes reclasificados a otro canal) + lo reasignado a Promociones/Google/Orgánico
-   (bySedeAsistidos, derivado por palabra clave, ver AGENTS.md §5c). A diferencia de adspendView,
-   esto SÍ es preciso por sucursal para los 3 canales sin desglose propio (viene de clasificar cada
-   paciente, no de un agregado de toda la red) — no hace falta `omitido`. No se usa para GERONTOLOGIA
-   (ver render(), esa sigue con ASISTE real por paciente). */
-function realAsistidosView(canal,sedeSet){
-  const canales = canal==='TODOS' ? ['FACEBOOK','PROMOCIONES','GOOGLE','ORGANICO'] : [canal];
-  const sedeFiltrado = !!(sedeSet && sedeSet.size);
-  let asistidos=0, bySedeAvailable=false;
-  for(const c of canales){
-    const ch=ADSPEND[c]; if(!ch) continue;
-    if(c==='FACEBOOK' && ch.bySede){
-      bySedeAvailable=true;
-      const keys = sedeFiltrado ? [...sedeSet] : Object.keys(ch.bySede);
-      for(const s of keys){ const v=ch.bySede[s]; if(v) asistidos+=v.asistidos||0; }
-    } else if(ch.bySedeAsistidos){
-      const keys = sedeFiltrado ? [...sedeSet] : Object.keys(ch.bySedeAsistidos);
-      for(const s of keys){ asistidos+=ch.bySedeAsistidos[s]||0; }
-    }
-  }
-  return { asistidos, bySedeAvailable };
-}
 function daysInMonth(y,mZeroBased){ return new Date(y,mZeroBased+1,0).getDate(); }
 /* corte compartido del mes en curso — a DÍA VENCIDO (el último día ya completo, o sea ayer, no
    hoy que todavía va corriendo). Irvin pidió este cambio el 2026-07-07 explícitamente para la
@@ -1292,16 +1282,14 @@ function enMesActual(r,ci){
   const d=new Date(r.fecha+'T00:00:00');
   return d.getFullYear()===ci.y && d.getMonth()===ci.m && d.getTime()<=ci.cutoff.getTime();
 }
-/* efectivosAgregados: Asistidos reales del scope actual (k.efectivos, ver render()/kpis()), null para
-   GERONTOLOGIA (cae al conteo por fila del mes, como antes — es el único canal con ASISTE real). A
-   diferencia de Agendados, para el resto ya no hay forma de filtrar "solo este mes" fila por fila (el
-   agregado de ASISTIDOS no trae fecha, es un acumulado como LEADS/META LEADS) — se trata como total
-   del periodo, sin filtro adicional. */
-function monthProjection(recs,efectivosAgregados){
+/* efectivosMes sale de asiste==='SI' por fila, filtrado al mes en curso (enMesActual) — desde que
+   ESTADO da asiste real por fila en todos los canales (2026-08-04, ver kpis()) ya no hace falta un
+   agregado sin fecha como antes; se calcula igual para todos los canales, no solo GERONTOLOGIA. */
+function monthProjection(recs){
   const ci=monthCutoffInfo();
   const {diasTranscurridos,diasDelMes}=ci;
   const citasMes=recs.filter(r=>enMesActual(r,ci));
-  const efectivosMes=efectivosAgregados!=null?efectivosAgregados:citasMes.filter(r=>r.asiste==='SI').length;
+  const efectivosMes=citasMes.filter(r=>r.asiste==='SI').length;
   const mk=(v)=>({mes:v, ritmo:v/diasTranscurridos, proyeccion:Math.round(v/diasTranscurridos*diasDelMes)});
   return { cutoff:ci.cutoff, diasTranscurridos, diasDelMes,
     agendados:mk(citasMes.length), efectivos:mk(efectivosMes) };
@@ -1345,7 +1333,7 @@ function renderPresupuesto(recs,k,av){
       <div class="meta">${c.meta}</div>
     </div>`).join('');
 
-  const p=monthProjection(recs,state.canal==='GERONTOLOGIA'?null:k.efectivos);
+  const p=monthProjection(recs);
   const cutStr=p.cutoff.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
   if($('proyHint')) $('proyHint').textContent=`datos a día vencido, corte: ${cutStr} · día ${p.diasTranscurridos} de ${p.diasDelMes} del mes`;
   const proyCards=[
@@ -1391,20 +1379,6 @@ function sedeRealLeads(sede,canalRows){
   }
   return any?total:null;
 }
-/* asistidos reales por sucursal: Facebook ya corregido (bySede[sede].asistidos, ver correctAsistidos
-   en excel_to_dat.js) + lo reasignado a Promociones/Google/Orgánico (bySedeAsistidos, derivado por
-   palabra clave). A diferencia de sedeRealLeads, esto sí es preciso para los 3 canales sin desglose
-   propio (viene de clasificar cada paciente, no de un agregado de toda la red) — sin dato conocido
-   simplemente suma 0, no hace falta el fallback a conteo de filas. No se usa para GERONTOLOGIA (ver
-   sedeAgg, sigue con ASISTE real por paciente). */
-function sedeAsistidos(sede,canalRows){
-  let total=0;
-  for(const c in canalRows){
-    if(c==='FACEBOOK'){ const fb=ADSPEND.FACEBOOK&&ADSPEND.FACEBOOK.bySede&&ADSPEND.FACEBOOK.bySede[sede]; if(fb) total+=fb.asistidos||0; }
-    else { const ch=ADSPEND[c]; if(ch&&ch.bySedeAsistidos) total+=ch.bySedeAsistidos[sede]||0; }
-  }
-  return total;
-}
 /** Meta del mes por sucursal: solo Facebook trae `META DE PACIENTES` por sede (adspend.dat).
  *  Regla pedida por Irvin (2026-07-06): si la meta son 90 citas, ritmo necesario = meta/díasDelMes,
  *  "lleva" = agendados de ESTE mes a la fecha (no historial completo), déficit = lleva menos lo que
@@ -1412,9 +1386,9 @@ function sedeAsistidos(sede,canalRows){
  *  al cierre), y proyección = ritmo actual × días del mes. Semáforo: verde si va igual o adelante del
  *  ritmo, amarillo si va hasta 20% abajo, rojo si va peor. */
 function metaForSede(sede){ const fb=ADSPEND.FACEBOOK; return fb&&fb.bySede&&fb.bySede[sede]?(fb.bySede[sede].metaPacientes||0):0; }
-/* lleva = asistidos corregidos de la sucursal a la fecha (ADSPEND ya es un acumulado del mes en
-   curso, como META LEADS/LEADS) — antes filtraba "asistió y pagó su consulta inicial", pero ese pago
-   ya no existe en el Excel (cambio 2026-08-01, ver AGENTS.md §4/§8b). */
+/* lleva = asiste==='SI' reales de la sucursal (sedeAgg, ver AGENTS.md §4/§5h) — antes filtraba
+   "asistió y pagó su consulta inicial", pero ese pago ya no existe en el Excel (cambio 2026-08-01,
+   ver AGENTS.md §4/§8b); desde 2026-08-04 además es dato real por fila, no un agregado. */
 function sedeMetaInfo(sede,lleva,ci){
   const meta=metaForSede(sede);
   if(!meta) return {meta:0,lleva,ritmoNecesario:0,esperadoHoy:0,deficit:0,ritmoActual:0,proyeccion:0,metaRatio:1,status:null};
@@ -1427,23 +1401,25 @@ function sedeMetaInfo(sede,lleva,ci){
   const status=metaRatio>=1?'verde':(metaRatio>=0.8?'amarillo':'rojo');
   return {meta,lleva,ritmoNecesario,esperadoHoy,deficit,ritmoActual,proyeccion,metaRatio,status};
 }
+/* asis/no salen del ESTADO real por paciente desde 2026-08-04 (ver kpis() arriba) — ya no del
+   Asistidos corregido agregado (sedeAsistidos/§5c), que se quedó solo para referencia histórica
+   (sigue viva por si se necesita comparar, pero sedeAgg ya no la llama). asisR excluye reservas/sin
+   dato del denominador (asis/(asis+no), pedido de Irvin 2026-08-04). */
 function sedeAgg(base){
   const ci=monthCutoffInfo();
   const m={};
-  for(const r of base){ const s=(m[r.sede]=m[r.sede]||{sede:r.sede,leads:0,n:0,asis:0,_canalRows:{}});
+  for(const r of base){ const s=(m[r.sede]=m[r.sede]||{sede:r.sede,leads:0,n:0,asis:0,no:0,_canalRows:{}});
     s._canalRows[r.canal]=(s._canalRows[r.canal]||0)+1;
     s.leads++; if(hasCita(r)) s.n++;
-    // GERONTOLOGIA es el único canal con ASISTE real por paciente (ver AGENTS.md §4); el resto usa
-    // el Asistidos agregado corregido (sedeAsistidos), calculado abajo fuera del loop por fila.
-    if(r.canal==='GERONTOLOGIA' && r.asiste==='SI') s.asis++; }
+    if(r.asiste==='SI') s.asis++; else if(r.asiste==='NO') s.no++; }
   return Object.values(m).map(s=>{ const {_canalRows,...rest}=s; const t=tierOf(s.sede);
     const real=sedeRealLeads(s.sede,_canalRows);
     const leads=real!=null?real:rest.leads;
-    const asis=_canalRows.GERONTOLOGIA?rest.asis:sedeAsistidos(s.sede,_canalRows);
-    const meta=sedeMetaInfo(s.sede,asis,ci);
-    return {...rest, leads, asis, divKey:t?t.key:'OTRAS', divLabel:t?t.label:'Otras', divColor:t?t.color:'#7F97A2',
-      schedR: leads?s.n/leads:0, efxLeads: leads?asis/leads:0,
-      asisR:s.n?asis/s.n:0,
+    const meta=sedeMetaInfo(s.sede,rest.asis,ci);
+    const resuelto=rest.asis+rest.no;
+    return {...rest, leads, divKey:t?t.key:'OTRAS', divLabel:t?t.label:'Otras', divColor:t?t.color:'#7F97A2',
+      schedR: leads?s.n/leads:0, efxLeads: leads?rest.asis/leads:0,
+      asisR:resuelto?rest.asis/resuelto:0,
       meta:meta.meta, metaLleva:meta.lleva, metaRitmoNecesario:meta.ritmoNecesario, metaEsperadoHoy:meta.esperadoHoy,
       metaDeficit:meta.deficit, metaRitmoActual:meta.ritmoActual, proy:meta.proyeccion, metaRatio:meta.metaRatio, metaStatus:meta.status }; });
 }
@@ -1502,16 +1478,17 @@ function renderSedeBars(agg){
     </div>`).join('') || '<div class="empty">Sin datos para esta vista.</div>';
 }
 function divAgg(rows){
-  const a={leads:0,n:0,asis:0,meta:0,metaLleva:0};
-  for(const s of rows){ a.leads+=s.leads; a.n+=s.n; a.asis+=s.asis;
+  const a={leads:0,n:0,asis:0,no:0,meta:0,metaLleva:0};
+  for(const s of rows){ a.leads+=s.leads; a.n+=s.n; a.asis+=s.asis; a.no+=s.no||0;
     a.meta+=s.meta||0; a.metaLleva+=s.metaLleva||0; }
   const ci=monthCutoffInfo();
   const ritmoNecesario=a.meta?a.meta/ci.diasDelMes:0;
   const esperadoHoy=ritmoNecesario*ci.diasTranscurridos;
   const proy=a.meta?Math.round((a.metaLleva/ci.diasTranscurridos)*ci.diasDelMes):0;
   const metaRatio=esperadoHoy?a.metaLleva/esperadoHoy:(a.metaLleva>0?1:0);
+  const resuelto=a.asis+a.no;
   return {...a, schedR:a.leads?a.n/a.leads:0, efxLeads:a.leads?a.asis/a.leads:0,
-    asisR:a.n?a.asis/a.n:0,
+    asisR:resuelto?a.asis/resuelto:0,
     proy, metaRatio, metaStatus:a.meta?(metaRatio>=1?'verde':(metaRatio>=0.8?'amarillo':'rojo')):null};
 }
 function metaCellHtml(s){
@@ -1893,9 +1870,23 @@ function estadoAgg(base){
   const conDato=si+no+pend, resuelto=si+no;
   return {si,no,pend,conDato,resuelto,asisR:resuelto?si/resuelto:0};
 }
+/* Mismo cálculo que estadoAgg, desglosado por sucursal (pedido de Irvin, 2026-08-04: "así sacalo
+   igual por sucursales") — cada fila es su propio si/(si+no), sin mezclar sedes entre sí. */
+function estadoPorSede(base){
+  const m={};
+  for(const r of base){
+    if(r.asiste!=='SI'&&r.asiste!=='NO'&&r.asiste!=='PENDIENTE') continue;
+    const s=(m[r.sede]=m[r.sede]||{sede:r.sede,si:0,no:0,pend:0});
+    s[r.asiste==='SI'?'si':(r.asiste==='NO'?'no':'pend')]++;
+  }
+  return Object.values(m).map(s=>{ const resuelto=s.si+s.no;
+    return {...s,resuelto,asisR:resuelto?s.si/resuelto:0}; })
+    .sort((a,b)=>b.resuelto-a.resuelto);
+}
 function renderEstado(base){
   const panel=$('estadoPanel'); if(!panel) return;
-  const e=estadoAgg(selSedes(base));
+  const scoped=selSedes(base);
+  const e=estadoAgg(scoped);
   if(!e.conDato){ panel.style.display='none'; return; }
   panel.style.display='';
   $('estadoRow').innerHTML=[
@@ -1903,6 +1894,15 @@ function renderEstado(base){
     {pc:'#FB6B5B',l:'No asisten',v:e.no,m:e.resuelto?`${pct(1-e.asisR)} de ${nf.format(e.resuelto)} resueltas (sin contar reservas)`:'sin citas resueltas todavía'},
     {pc:'#F5A524',l:'En reserva',v:e.pend,m:`${pct(e.conDato?e.pend/e.conDato:0)} del total agendado · próximas por resolver`},
   ].map(c=>`<div class="padtop" style="--pc:${c.pc}"><div class="pl">${c.l}</div><div class="pv"><span class="dt"></span>${nf.format(c.v)}</div><div class="pm">${c.m}</div></div>`).join('');
+  const bySede=estadoPorSede(scoped);
+  $('estadoSedeTbody').innerHTML=bySede.map(s=>`
+    <tr>
+      <td>${sedeTag(s.sede)}</td>
+      <td class="num mono">${s.si}</td>
+      <td class="num mono">${s.no}</td>
+      <td class="num mono">${s.pend}</td>
+      <td class="num">${s.resuelto?pctCell(s.asisR,[.65,.5]):'<span class="t-zero">—</span>'}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="empty" style="text-align:center;padding:22px">Sin datos para esta vista.</td></tr>';
 }
 
 /* ---------- por servicio (Gerontología y futuros canales con columna SERVICIO) ----------
