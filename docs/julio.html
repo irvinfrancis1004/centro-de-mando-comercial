@@ -370,6 +370,30 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
 .plancal-legend span{display:inline-flex;align-items:center;gap:7px}
 .plancal-legend .smfdot{margin-right:0}
 .plc-dim{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--line2);flex:none}
+.plancell{cursor:pointer}
+.plancell.blank{cursor:default}
+.plancell:not(.blank):hover{border-color:var(--teal);transform:translateY(-1px)}
+
+/* ===== modal (detalle de día del Plan diario, agregado 2026-08-04) ===== */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(5,10,12,.72);backdrop-filter:blur(3px);
+  z-index:100;align-items:center;justify-content:center;padding:24px}
+.modal-overlay.on{display:flex}
+.modal-panel{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line2);
+  border-radius:var(--r);box-shadow:0 30px 70px -20px rgba(0,0,0,.75);max-width:540px;width:100%;
+  max-height:82vh;display:flex;flex-direction:column;overflow:hidden}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line);flex:none}
+.modal-head h3{margin:0;font-family:var(--disp);font-weight:600;font-size:16px}
+.modal-x{background:none;border:none;color:var(--ink2);font-size:22px;line-height:1;cursor:pointer;padding:3px 8px;border-radius:7px}
+.modal-x:hover{color:var(--ink);background:rgba(255,255,255,.06)}
+.modal-body{padding:16px 20px 20px;overflow-y:auto}
+.modal-sum{font-size:12.5px;color:var(--ink2);margin-bottom:12px}
+.modal-sum b{color:var(--ink);font-family:var(--mono)}
+.modal-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.modal-table th{text-align:left;font-family:var(--mono);font-size:9.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);padding:0 0 8px;font-weight:600}
+.modal-table th.num,.modal-table td.num{text-align:right}
+.modal-table td{padding:7px 0;border-top:1px solid rgba(34,56,63,.55);color:var(--ink)}
+.modal-table td.nm{color:var(--ink2)}
+@media(prefers-reduced-motion:reduce){.plancell:hover{transform:none}}
 @media(max-width:720px){ .plancal-head,.plancal{grid-template-columns:repeat(7,1fr);gap:5px} .plancell{min-height:50px;padding:6px 5px 5px} .plancell .pcmain{font-size:15px} }
 .pgb .gd{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;opacity:.85}
 .padtag{display:inline-flex;align-items:center;gap:8px;background:rgba(25,194,168,.12);border:1px solid rgba(25,194,168,.34);color:#9CEEDD;font-family:var(--body);font-size:11.5px;font-weight:600;border-radius:20px;padding:4px 7px 4px 12px;margin-left:2px}
@@ -862,6 +886,17 @@ td.nm{font-weight:500;max-width:210px;overflow:hidden;text-overflow:ellipsis}
   <div class="foot">
     <b>Centro de Mando Comercial · Equilibrio Total</b><br>
     Los datos se leen de tu archivo de base de pacientes. Para actualizar, usa <b>Subir Excel</b> con tu archivo del mes.
+  </div>
+</div>
+
+<!-- MODAL: detalle de un día del Plan diario, por sucursal (clic en una celda del calendario) -->
+<div class="modal-overlay" id="dayModalOverlay">
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="dayModalTitle">
+    <div class="modal-head">
+      <h3 id="dayModalTitle">Día</h3>
+      <button class="modal-x" id="dayModalClose" aria-label="Cerrar" type="button">×</button>
+    </div>
+    <div class="modal-body" id="dayModalBody"></div>
   </div>
 </div>
 
@@ -1938,6 +1973,16 @@ $('tabbar').addEventListener('click',e=>{ const b=e.target.closest('.tab'); if(!
   document.querySelectorAll('.tabpanel').forEach(p=>p.classList.toggle('on',p.dataset.panel===t));
   window.scrollTo({top:0,behavior:'smooth'}); });
 
+/* modal de detalle de día (Plan diario) */
+$('planDiarioBody').addEventListener('click',e=>{
+  const cell=e.target.closest('.plancell'); if(!cell||cell.classList.contains('blank')) return;
+  const day=+cell.dataset.day, divKey=cell.dataset.div; if(!day||!divKey) return;
+  openDayModal(divKey,day);
+});
+$('dayModalClose').addEventListener('click',closeDayModal);
+$('dayModalOverlay').addEventListener('click',e=>{ if(e.target.id==='dayModalOverlay') closeDayModal(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDayModal(); });
+
 /* sede multi-select popover */
 const mselTrig=$('mselTrig'), mselPop=$('mselPop');
 function openMsel(o){ mselPop.classList.toggle('open',o); mselTrig.classList.toggle('open',o); mselTrig.setAttribute('aria-expanded',o?'true':'false'); }
@@ -2288,8 +2333,8 @@ function renderPlanDiario(){
       const esHoy=esMesHoy&&day===hoyReal.getDate();
       const main=esFuturo?planeado:(sinPlan?'—':real);
       const sub=esFuturo?'planeadas':(sinPlan?'sin plan':`de ${planeado}`);
-      const tip=esFuturo?`Día ${day} · ${planeado} planeadas`:`Día ${day} · ${real} reales de ${planeado} planeadas`;
-      cells.push(`<div class="plancell ${status}${esHoy?' hoy':''}" title="${tip}">
+      const tip=esFuturo?`Día ${day} · ${planeado} planeadas · clic para ver por sucursal`:`Día ${day} · ${real} reales de ${planeado} planeadas · clic para ver por sucursal`;
+      cells.push(`<div class="plancell ${status}${esHoy?' hoy':''}" data-day="${day}" data-div="${divKey}" title="${tip}">
         <span class="pcday">${day}</span>
         <span class="pcmain">${main}</span>
         <span class="pcsub">${sub}</span>
@@ -2305,6 +2350,43 @@ function renderPlanDiario(){
   }
   el.innerHTML = html || '<div class="empty">Sin datos para esta vista.</div>';
 }
+
+/* Modal de detalle por día (agregado 2026-08-04, pedido de Irvin: "que me abra una ventana en el
+   mismo dash y pueda ver por sede cuantas hay") — clic en una celda del calendario. Recalcula
+   buildPlanReal() en el momento (barato, una pasada sobre RECORDS) en vez de cachear, así nunca
+   muestra datos desfasados si el Excel se subió de nuevo entre renders. */
+function openDayModal(divKey,day){
+  const pr=buildPlanReal(); if(!pr) return;
+  const { plan, ci, realMap } = pr;
+  const sedes=plan[divKey]; if(!sedes) return;
+  const labelOf={CORPORATIVO:'Corporativo',FRANQUICIAS:'Franquicias',TERCERIZADAS:'Tercerizadas'};
+  const esFuturo=day>ci.diasTranscurridos;
+  const rows=Object.keys(sedes).map(sede=>({ sede, planeado:sedes[sede][day]||0, real:(realMap[sede]&&realMap[sede][day])||0 }))
+    .sort((a,b)=>b.real-a.real||b.planeado-a.planeado);
+  const sumPlan=rows.reduce((a,r)=>a+r.planeado,0), sumReal=rows.reduce((a,r)=>a+r.real,0);
+  $('dayModalTitle').textContent=`Día ${day} · ${labelOf[divKey]||divKey}`;
+  const rowsHtml=rows.map(r=>{
+    const ratio=r.planeado?r.real/r.planeado:(r.real>0?1:0);
+    const sinPlan=!esFuturo&&r.planeado===0&&r.real===0;
+    const status=esFuturo||sinPlan?null:(ratio>=1?'verde':(ratio>=.8?'amarillo':'rojo'));
+    return `<tr>
+      <td class="nm">${titleCase(r.sede)}</td>
+      <td class="num mono">${r.planeado}</td>
+      <td class="num mono">${esFuturo?'—':r.real}</td>
+      <td class="num">${status?`<span class="smfdot ${status}"></span>`:'<span class="t-zero">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  $('dayModalBody').innerHTML=`
+    <div class="modal-sum">${esFuturo?`<b>${sumPlan}</b> planeadas en total (día futuro, todavía sin real)`:`<b>${sumReal}</b> reales de <b>${sumPlan}</b> planeadas en total`}</div>
+    <div class="tscroll">
+      <table class="modal-table">
+        <thead><tr><th>Sucursal</th><th class="num">Planeadas</th><th class="num">Reales</th><th class="num">Estado</th></tr></thead>
+        <tbody>${rowsHtml || '<tr><td colspan="4" class="empty">Sin sucursales con plan.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+  $('dayModalOverlay').classList.add('on');
+}
+function closeDayModal(){ $('dayModalOverlay').classList.remove('on'); }
 
 /* corte de la semana ISO actual (lunes=inicio), a día vencido igual que monthCutoffInfo — siempre
    calculado desde new Date() en cada render, nunca persistido, así que nunca queda una alerta de una
