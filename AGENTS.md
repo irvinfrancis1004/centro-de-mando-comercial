@@ -107,7 +107,9 @@ numero           string (teléfono)
 fecha            fecha ISO de la CITA (fecha de agenda). Su presencia define "agendado".
 hora             'HH:MM' de la cita, o null — viene de la misma celda que fecha (ver §5g)
 sede             string en MAYÚSCULAS (normalizada); 'SIN SEDE' si el canal no la trae
-asiste           'SI' | 'NO' | 'PENDIENTE' | 'SIN DATO' — real solo para GERONTOLOGIA (ver más abajo)
+asiste           'SI' | 'NO' | 'PENDIENTE' | 'SIN DATO' — real para GERONTOLOGIA y, desde 2026-08-04,
+                 también para BASE DE PACIENTES vía su columna ESTADO (ver §5h); 'SIN DATO' solo si
+                 ninguna de las 2 columnas existe en la hoja
 especialidad     string libre — 'ACUPUNTURA'/'FISIOTERAPIA'/'QUIROPRACTICA'..., '' si no capturada (ver §5g)
 padecimiento     string libre (texto del CRM)
 servicio         string — solo GERONTOLOGIA la trae hoy ("Consulta Inicial Gerontologia"...); '' en los demás canales (ver §5d)
@@ -135,6 +137,15 @@ padGrp           string — se agrega en runtime (annotatePad) con el clasificad
 
 Tasas: **agendamiento** = agendados/leads · **asistencia** = efectivos/agendados · **conversión** =
 efectivos/leads (lead que se vuelve paciente que sí llegó).
+
+> **Nota (2026-08-04):** desde que BASE DE PACIENTES trae `asiste` real (columna ESTADO, ver §5h), el
+> embudo/KPIs **siguen** usando el Asistidos corregido de §5c para "Efectivo" en los 4 canales de
+> marketing — no se cambió esa definición a propósito (decisión no pedida, fuera de alcance de lo que
+> se pidió ese día). El nuevo `asiste` real por fila se usa aparte, en el panel "Estado de citas"
+> (Resumen) y en `padAgg` (Padecimientos) — sus números pueden NO cuadrar exactos con "Efectivos" del
+> embudo porque son 2 fuentes/metodologías distintas. Si algún día se quiere unificar (usar el
+> `asiste` real como fuente única de "Efectivo" también en el embudo), es un cambio de diseño
+> deliberado que hay que confirmar con Irvin primero, no asumirlo.
 
 > **Cambio 2026-08-01 (petición de Irvin):** el dashboard ya no muestra la etapa "Plan" (aperturación
 > de tratamiento) ni la tasa de "cierre" (planes/efectivos), ni ninguna cifra de dinero (ticket
@@ -523,13 +534,61 @@ Ranking), en este orden:
 Los 4 respetan el filtro de canal/sede activo igual que el resto del dashboard (`selSedes`) — si
 Irvin filtra a una sola sede, las 4 vistas se recalculan solo para esa sede.
 
-> **`padAgg` ya no puede calcular efectividad por padecimiento** (cambio 2026-08-01): antes usaba
-> `asiste==='SI'` por fila, que dejó de existir para los 4 canales de marketing (ver §4) — ahora solo
-> cuenta volumen de agendados (`n`) y agendados del mes en curso (`nMes`, mismo corte que
-> `monthCutoffInfo`, para dar una señal de "qué está subiendo ahora" ya que no hay % de asistencia
-> que mostrar). Las columnas "Efectivos"/"% Asist." y la tarjeta "Mejor % de asistencia" del panel de
-> padecimientos se quitaron por lo mismo — no hay forma honesta de calcularlas sin inventar un
-> reparto proporcional del Asistidos agregado, que nadie pidió.
+## 5h. ESTADO real y encabezados nativos de BASE DE PACIENTES (agregado 2026-08-04)
+
+Irvin cambió cómo arma `BASE DE PACIENTES`: en vez de pegar un extracto armado a mano, ahora pega la
+exportación completa y nativa de su sistema de reservas. Esto trajo 2 problemas reales que hay que
+recordar si vuelve a pasar algo raro con esta hoja:
+
+**1. Encabezados nativos, ya no los de siempre.** La fila de encabezado dejó de decir NOMBRE/APELLIDO/
+NUMERO/FECHA DE AGENDA/ESPECIALIDAD/ESTADO/SEDE/PADECIMIENTO y ahora trae los nombres propios del
+sistema de reservas: `Fecha de realización` (= nuestra `fecha`/`hora`), `Local` (= `sede`), `Nombre`,
+`Apellido`, `Teléfono` (= `numero`), `Servicio` (= `especialidad` — **no** el `servicio` de
+GERONTOLOGIA, ver abajo), `Estado` (= `asiste`, ver punto 3), `Comentario interno` (= `padecimiento`).
+`col()` (en `extractPatientRows`, excel_to_dat.js y dashboard_template.html, **deben coincidir**) ya
+trae estos alias además de los viejos, así que no depende de que Irvin siga pegando exactamente este
+formato — pero si el mes que viene la exportación trae encabezados distintos otra vez, hay que
+repetir este mismo ejercicio: abrir el Excel, ver qué dice la fila 1 y a qué columna con datos reales
+corresponde cada campo, y agregar el alias que falte a `col(...)`.
+
+**2. Bug real encontrado ese día: `col()` hacía match por substring sin priorizar exacto.**
+`"PRESTADOR".includes("ESTADO")` es `true` (pr-**ESTADO**-r) — la búsqueda por substring encontraba
+la columna "Prestador" antes que la columna "Estado" real, y `asiste` salía `SIN DATO` para las 738
+filas aunque el dato sí estaba ahí. Arreglado: `col()` ahora prueba **coincidencia exacta primero**
+en todas las keys, y solo cae a substring si ninguna coincide exacto. Si se agregan más alias a `col()`
+en el futuro, tener esto en cuenta — un substring corto (como "ESTADO") puede chocar con cualquier
+palabra que lo contenga.
+
+**3. `ESTADO` trae 6 valores reales, Irvin solo distingue 3.** `estadoToAsiste(v)` (mismo nombre en
+ambos archivos) mapea: `Asiste`→`SI`, `No Asiste`→`NO`, y `Reservado`/`Confirmado`/`En Espera`/
+`Pendiente`→`PENDIENTE` (decisión explícita de Irvin, 2026-08-04: los últimos 3 son variantes de
+"cita futura/sin resolver todavía", se agrupan con Reservado). Si `ESTADO` no existe en la hoja (ej.
+`BASE DE GERONTOLOGIA`, que sigue trayendo su propio `ASISTE` literal SI/NO), se usa ese valor tal
+cual, sin pasar por `estadoToAsiste`.
+
+**4. `especialidad` vs `servicio` — mismo nombre de columna, dos campos distintos.** La hoja nueva le
+dice "Servicio" a lo que aquí es `especialidad` (Consulta Inicial Acupuntura/Fisioterapia/
+Quiropráctica). Eso choca con el campo `servicio` que ya existía para GERONTOLOGIA (su propia hoja,
+con su propio "SERVICIO" literal — "Consulta Inicial Gerontologia"...). `extractPatientRows` recibe
+un 3er parámetro `opts.especialidadFromServicio` (`true` solo para la llamada de la hoja unificada
+BASE DE PACIENTES): si está activo, `especialidad` cae a la columna "Servicio" cuando no hay
+"Especialidad", y `servicio` se deja sin usar (`-1`) para no leer esa misma columna 2 veces con
+significados distintos. GERONTOLOGIA no manda esta opción, así que su propio "SERVICIO" sigue
+llenando `servicio` normal.
+
+**Nuevo, gracias a `asiste` real en todos los canales:**
+
+- **`padAgg`** (Padecimientos) ya vuelve a calcular efectividad por padecimiento: `si`/`no`/`pend` por
+  grupo + `asisR` = `si/(si+no)` (Reservado no cuenta en el denominador — todavía no se sabe si van a
+  llegar). Tarjetas nuevas en `padTops`: **"Los que más llegan"** / **"Los que menos llegan"** (mejor/
+  peor `asisR`, solo entre padecimientos con ≥5 citas resueltas, para no rankear por 1-2 citas de
+  ruido). Tabla de padecimientos con columnas nuevas: Asiste/No asiste/Reservado/% Asist.
+- **Panel "Estado de citas"** (`estadoAgg`/`renderEstado`, pestaña Resumen, panel `#estadoPanel`,
+  debajo de "Pacientes por sucursal"/dona): 3 tarjetas (Asisten/No asisten/En reserva) con conteo y %
+  sobre el total con estado capturado (`conDato`, excluye `SIN DATO`). Oculto si `conDato` es 0.
+  **Importante:** esto usa `asiste` real por fila, **no** el mismo número que "Efectivos" del embudo/
+  KPIs (que sigue usando el Asistidos corregido de §5c) — ver la nota en §4, pueden no cuadrar exacto
+  entre sí a propósito.
 
 ## 6. Divisiones (tiers) — array `TIERS`
 
@@ -584,7 +643,9 @@ Todo el JS está en el único `<script>` del final. Funciones clave:
 - `renderFunnel(k)`, `renderKpis(k,base)`, `renderDonut(k)` (2 segmentos, ver §4)
 - `renderSede(base)` + `renderSedeBars` + `sedeRowHtml` + `divRowHtml` (tabla agrupada por división con semáforo y TOTAL GENERAL)
 - `renderPad(base)` + `padAgg` + `padGroupKey` (clasificador de padecimientos, 17 grupos + OTRO;
-  solo volumen desde 2026-08-01, ver §5g)
+  volumen + efectividad por asiste real desde 2026-08-04, ver §5h)
+- `renderEstado(base)` + `estadoAgg` + `estadoToAsiste` (Asiste/No Asiste/Reservado real por
+  paciente, panel "Estado de citas" en Resumen, ver §5h)
 - `renderPatients(base)` (tabla de pacientes, chips, búsqueda, color por división)
 - `renderFocos(base)` (focos rojos: sedes ≥4 agendados, no verde, top 5 por urgencia)
 - `renderPresupuesto(recs,k)` + `adspendView(canal,sedeSet)` + `monthProjection(recs,efectivosAgregados)`
@@ -669,10 +730,11 @@ reemplazó, en el mismo lugar de la barra, por **Horarios y Áreas**:
 
 1. **resumen** — focos rojos + embudo de 3 etapas (Leads→Agendados→Efectivos) con insignia de
    Conversión + KPIs (con tilt 3D, sin dinero, ver §4) + gráficas (barras + dona de 2 segmentos
-   Efectivos/Resto, ver §4) + panel "Por servicio" (condicional, ver §5d)
+   Efectivos/Resto, ver §4) + panel "Estado de citas" (Asiste/No Asiste/Reservado real, condicional,
+   ver §5h) + panel "Por servicio" (condicional, ver §5d)
 2. **sucursales** — tabla agrupada por división, subtotales, TOTAL GENERAL, semáforo, meta del mes (§8b)
-3. **padecimientos** — clasificador + tarjetas + barras + tabla (solo volumen de agendados, ver §5g);
-   clic filtra la base y salta a Pacientes
+3. **padecimientos** — clasificador + tarjetas + barras + tabla (volumen + efectividad por asiste
+   real, ver §5h); clic filtra la base y salta a Pacientes
 4. **horarios** ("Horarios y Áreas") — alertas de desequilibrio por área + heatmap horario × área +
    panel "Horarios pico por sucursal" + panel "Por área" (los 4 condicionales, ver §5g). Reemplazó a
    Ranking (ver §11).

@@ -219,10 +219,34 @@ function detectCanalFromPad(pad) {
   return 'FACEBOOK';
 }
 
+/** BASE DE PACIENTES trae ESTADO (desde 2026-08-04, columna nativa del sistema de reservas) con 6
+ *  valores reales. Irvin solo distingue 3 (Asiste/No Asiste/Reservado) — Confirmado/En Espera/
+ *  Pendiente son variantes de "todavía no se resuelve" y se agrupan con Reservado (decisión
+ *  explícita de Irvin, 2026-08-04). Devuelve el mismo vocabulario que ya usa el resto del dashboard
+ *  para `asiste` (SI/NO/PENDIENTE/SIN DATO, ver AGENTS.md §4) — así PENDIENTE == "en reserva" en
+ *  todos los chips/filtros existentes, sin necesidad de un valor nuevo. */
+function estadoToAsiste(v) {
+  const s = String(v || '').trim().toUpperCase();
+  if (s === 'ASISTE') return 'SI';
+  if (s === 'NO ASISTE') return 'NO';
+  if (s === 'RESERVADO' || s === 'CONFIRMADO' || s === 'EN ESPERA' || s === 'PENDIENTE') return 'PENDIENTE';
+  return 'SIN DATO';
+}
+
 /** Extrae pacientes de una hoja "BASE DE PACIENTES" ya localizada. canalFor(padecimiento) decide
  *  el canal de cada fila: fijo (formato viejo, una hoja por canal) o detectado por texto (formato
- *  nuevo, una sola hoja "BASE DE PACIENTES" para todos los canales). */
-function extractPatientRows(rows, canalFor) {
+ *  nuevo, una sola hoja "BASE DE PACIENTES" para todos los canales).
+ *
+ *  opts.especialidadFromServicio (desde 2026-08-04): la hoja unificada "BASE DE PACIENTES" viene
+ *  directo del sistema de reservas de Irvin, con sus propios encabezados nativos ("Fecha de
+ *  realización", "Local", "Servicio", "Estado", "Comentario interno"...) en vez de los nombres que
+ *  usaba el Excel armado a mano antes. Su columna "Servicio" es lo que aquí llamamos `especialidad`
+ *  (Consulta Inicial Acupuntura/Fisioterapia/Quiropráctica) — NO es lo mismo que el campo `servicio`
+ *  que usa GERONTOLOGIA (su propia hoja, con su propio "SERVICIO" literal). Si esta opción está
+ *  activa, `especialidad` cae a 'SERVICIO' cuando no hay 'ESPECIALIDAD', y `servicio` se deja sin
+ *  usar (-1) para no leer esa misma columna dos veces con significados distintos. */
+function extractPatientRows(rows, canalFor, opts) {
+  opts = opts || {};
   const out = [];
   if (!rows.length) return out;
   let hr = -1;
@@ -231,7 +255,14 @@ function extractPatientRows(rows, canalFor) {
   }
   if (hr < 0) hr = 0;
   const head = rows[hr].map(c => (c == null ? '' : String(c).trim().toUpperCase()));
+  // Coincidencia exacta primero, substring como respaldo (útil para headers viejos con espacios de
+  // más). Sin esto, un header como "PRESTADOR" gana por accidente contra "ESTADO" en la búsqueda por
+  // substring (pr-ESTADO-r) y devuelve la columna equivocada (bug real encontrado 2026-08-04).
   const col = (...keys) => {
+    for (const k of keys) {
+      const idx = head.indexOf(k);
+      if (idx >= 0) return idx;
+    }
     for (const k of keys) {
       const idx = head.findIndex(h => h.includes(k));
       if (idx >= 0) return idx;
@@ -239,9 +270,15 @@ function extractPatientRows(rows, canalFor) {
     return -1;
   };
   const ci = {
-    nom: col('NOMBRE'), ape: col('APELLIDO'), num: col('NUMERO', 'NÚMERO'), fec: col('FECHA DE AGENDA', 'AGENDA'),
-    sede: col('SEDE', 'SUCURSAL'), asis: col('ASISTE'), especialidad: col('ESPECIALIDAD'),
-    pad: col('PADECIMIENTO'), servicio: col('SERVICIO'),
+    nom: col('NOMBRE'), ape: col('APELLIDO'),
+    num: col('NUMERO', 'NÚMERO', 'TELEFONO', 'TELÉFONO'),
+    fec: col('FECHA DE AGENDA', 'AGENDA', 'FECHA DE REALIZACION', 'FECHA DE REALIZACIÓN'),
+    sede: col('SEDE', 'SUCURSAL', 'LOCAL'),
+    asis: col('ASISTE'),
+    estado: col('ESTADO'),
+    especialidad: opts.especialidadFromServicio ? col('ESPECIALIDAD', 'SERVICIO') : col('ESPECIALIDAD'),
+    pad: col('PADECIMIENTO', 'COMENTARIO INTERNO'),
+    servicio: opts.especialidadFromServicio ? -1 : col('SERVICIO'),
   };
   for (let i = hr + 1; i < rows.length; i++) {
     const row = rows[i];
@@ -250,6 +287,11 @@ function extractPatientRows(rows, canalFor) {
     const ape = ci.ape >= 0 && row[ci.ape] != null ? String(row[ci.ape]).trim() : '';
     const padecimiento = ci.pad >= 0 && row[ci.pad] != null ? String(row[ci.pad]).replace(/\\n/g, '\n') : '';
     const fechaRaw = ci.fec >= 0 ? row[ci.fec] : null;
+    // ESTADO (nuevo, ver estadoToAsiste) manda si existe; si no, cae al ASISTE literal de
+    // GERONTOLOGIA (su propia hoja); si ninguno existe, 'SIN DATO' (ver AGENTS.md §4).
+    const asiste = ci.estado >= 0 && row[ci.estado] != null
+      ? estadoToAsiste(row[ci.estado])
+      : (ci.asis >= 0 && row[ci.asis] != null ? String(row[ci.asis]).trim().toUpperCase() : 'SIN DATO');
     out.push({
       canal: canalFor(padecimiento),
       nombre: ape ? (String(nm).trim() + ' ' + ape) : String(nm).trim(),
@@ -257,9 +299,7 @@ function extractPatientRows(rows, canalFor) {
       fecha: asISO(fechaRaw),
       hora: asHora(fechaRaw),
       sede: normSede(ci.sede >= 0 ? row[ci.sede] : null),
-      // ASISTE ya no existe en BASE DE PACIENTES (desde 2026-08) — solo BASE DE GERONTOLOGIA lo trae
-      // real todavía; para el resto queda 'SIN DATO' (ver AGENTS.md §4).
-      asiste: ci.asis >= 0 && row[ci.asis] != null ? String(row[ci.asis]).trim().toUpperCase() : 'SIN DATO',
+      asiste,
       especialidad: ci.especialidad >= 0 && row[ci.especialidad] != null ? String(row[ci.especialidad]).trim() : '',
       padecimiento,
       servicio: ci.servicio >= 0 && row[ci.servicio] != null ? String(row[ci.servicio]).trim() : '',
@@ -275,7 +315,7 @@ function parseWorkbook(wb) {
   const unifiedName = wb.SheetNames.find(n => /^\s*BASE DE PACIENTES\s*$/i.test(n));
   if (unifiedName) {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[unifiedName], { header: 1, defval: null, raw: true, blankrows: false });
-    out = extractPatientRows(rows, detectCanalFromPad);
+    out = extractPatientRows(rows, detectCanalFromPad, { especialidadFromServicio: true });
   } else {
     // Formato viejo: una hoja "BASE DE PACIENTES ... <CANAL>" por canal.
     const map = [
