@@ -1102,7 +1102,11 @@ function kpis(recs,realLeads){
   const no=recs.filter(r=>r.asiste==='NO').length;
   const pend=Math.max(agendados-efectivos-no,0); // reservas + sin dato, residual sobre agendados
   const resuelto=efectivos+no;
-  return { N:leads, leads, agendados, efectivos, no, pend,
+  // sinAsisData: hay agendados pero ninguno con ESTADO/ASISTE capturado (ej. Julio, Excel viejo sin
+  // columna ESTADO, ver AGENTS.md §5h) — "0% asistencia" sería engañoso (parece que nadie llegó,
+  // cuando en realidad no hay dato). Usado para mostrar "sin dato" en vez de 0 en el embudo/KPIs.
+  const sinAsisData = agendados>0 && resuelto===0;
+  return { N:leads, leads, agendados, efectivos, no, pend, sinAsisData,
     schedR: leads?agendados/leads:0, efxLeads: leads?efectivos/leads:0,
     asisR: resuelto?efectivos/resuelto:0 };
 }
@@ -1192,13 +1196,14 @@ function renderFunnel(k){
   animNum($('fn-efec'),k.efectivos,asInt);
   $('fn-leads-sub').textContent = nf.format(k.leads)+' contactos';
   $('fn-agend-sub').textContent = nf.format(k.agendados)+' con cita';
-  $('fn-efec-sub').textContent = nf.format(Math.max(k.agendados-k.efectivos,0))+' resto (no asist./pend.)';
+  $('fn-efec-sub').textContent = k.sinAsisData ? 'sin dato de asistencia para esta vista' : nf.format(Math.max(k.agendados-k.efectivos,0))+' resto (no asist./pend.)';
   const maxF=Math.max(k.leads,k.agendados,1);
   setTimeout(()=>{ $('fb-1').style.width=(k.leads/maxF*100)+'%';
     $('fb-2').style.width=(k.agendados/maxF*100)+'%';
     $('fb-3').style.width=(k.efectivos/maxF*100)+'%'; },40);
   setRate('rate-sched',k.schedR,[.30,.20]);
-  setRate('rate-asis',k.asisR,[.65,.5]);
+  if(k.sinAsisData){ const el=$('rate-asis'); el.textContent='sin dato'; el.className='rate'; }
+  else setRate('rate-asis',k.asisR,[.65,.5]);
   $('convBadge').textContent = pct(k.efxLeads);
 }
 
@@ -1221,7 +1226,7 @@ function renderKpis(k,base){
   const cards=[
     {lab:'Leads (contactos)',val:asInt(k.leads),cls:'',meta:`agendamiento <b>${pct(k.schedR)}</b>`,ic:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/>'},
     {lab:'Agendados',val:asInt(k.agendados),cls:'',meta:`<b>${pct(k.schedR)}</b> de leads`,ic:'<path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'},
-    {lab:'Efectivos (asistieron)',val:asInt(k.efectivos),cls:'k-good',meta:`<b>${pct(k.asisR)}</b> asist · <b>${pct(k.efxLeads)}</b> de leads`,ic:'<path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'},
+    {lab:'Efectivos (asistieron)',val:asInt(k.efectivos),cls:'k-good',meta:k.sinAsisData?'sin dato de asistencia para esta vista':`<b>${pct(k.asisR)}</b> asist · <b>${pct(k.efxLeads)}</b> de leads`,ic:'<path d="M20 6 9 17l-5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'},
     {lab:'Conversión',val:pct(k.efxLeads),cls:'k-warn',meta:`de cada 100 leads, <b>${Math.round(k.efxLeads*100)}</b> se vuelven paciente`,ic:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m13 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'},
     {lab:'Padecimiento más frecuente',val:padTop?padTop.label:'—',cls:'',meta:padTop?`<b>${asInt(padTop.n)}</b> agendados`:'sin datos',ic:'<path d="M22 12h-4l-3 9L9 3l-3 9H2" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'},
     {lab:'Sucursales en meta',val:sedesConMeta.length?`${sedesEnMeta}/${sedesConMeta.length}`:'—',cls:sedesConMeta.length&&sedesEnMeta===sedesConMeta.length?'k-good':'',meta:'al ritmo esperado a hoy',ic:'<path d="M12 8v5m0 3h.01M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/>'},
@@ -1360,7 +1365,7 @@ function renderDonut(k){
   // offsets: start at top (offset 25 = 12 o'clock for r=15.915 circumference 100)
   set('dn-si',si,25);
   set('dn-no',100-si,25-si);
-  $('dn-pct').textContent=pct(k.asisR);
+  $('dn-pct').textContent=k.sinAsisData?'—':pct(k.asisR);
   $('lg-si').textContent=nf.format(k.efectivos);
   $('lg-no').textContent=nf.format(Math.max(k.agendados-k.efectivos,0));
 }
@@ -1419,7 +1424,7 @@ function sedeAgg(base){
     const resuelto=rest.asis+rest.no;
     return {...rest, leads, divKey:t?t.key:'OTRAS', divLabel:t?t.label:'Otras', divColor:t?t.color:'#7F97A2',
       schedR: leads?s.n/leads:0, efxLeads: leads?rest.asis/leads:0,
-      asisR:resuelto?rest.asis/resuelto:0,
+      asisR:resuelto?rest.asis/resuelto:0, sinAsisData: rest.n>0 && resuelto===0,
       meta:meta.meta, metaLleva:meta.lleva, metaRitmoNecesario:meta.ritmoNecesario, metaEsperadoHoy:meta.esperadoHoy,
       metaDeficit:meta.deficit, metaRitmoActual:meta.ritmoActual, proy:meta.proyeccion, metaRatio:meta.metaRatio, metaStatus:meta.status }; });
 }
@@ -1431,8 +1436,14 @@ function sedeTag(sede){ const t=tierOf(sede); const c=t?t.color:'#7F97A2';
 /* ---------- salud / semáforo por sede o división ---------- */
 const TARGETS={sched:.30, asis:.65};
 const TLABEL={sched:'Agendamiento', asis:'Asistencia'};
+/* sinAsisData (ver kpis()/sedeAgg): sin esto, una sede sin dato real de asistencia (ej. Julio, Excel
+   viejo) sacaría 0% asistencia y sería castigada como si nunca llegara nadie — no es honesto. Con
+   sinAsisData, el score se calcula solo con agendamiento (peso 1.0), y "asis" no puede salir como la
+   métrica "weak" (no hay nada que mostrar de ella). */
 function salud(s){
-  const a=Math.min((s.schedR||0)/TARGETS.sched,1), b=Math.min((s.asisR||0)/TARGETS.asis,1);
+  const a=Math.min((s.schedR||0)/TARGETS.sched,1);
+  if(s.sinAsisData) return {score:Math.round(100*a), status:(a>=.8?'verde':(a>=.55?'amarillo':'rojo')), weak:{k:'sched',val:s.schedR||0,r:a}};
+  const b=Math.min((s.asisR||0)/TARGETS.asis,1);
   const score=Math.round(100*(0.5*a+0.5*b));
   const status=score>=80?'verde':(score>=55?'amarillo':'rojo');
   const mets=[{k:'sched',val:s.schedR||0,r:a},{k:'asis',val:s.asisR||0,r:b}];
@@ -1488,16 +1499,18 @@ function divAgg(rows){
   const metaRatio=esperadoHoy?a.metaLleva/esperadoHoy:(a.metaLleva>0?1:0);
   const resuelto=a.asis+a.no;
   return {...a, schedR:a.leads?a.n/a.leads:0, efxLeads:a.leads?a.asis/a.leads:0,
-    asisR:resuelto?a.asis/resuelto:0,
+    asisR:resuelto?a.asis/resuelto:0, sinAsisData: a.n>0 && resuelto===0,
     proy, metaRatio, metaStatus:a.meta?(metaRatio>=1?'verde':(metaRatio>=0.8?'amarillo':'rojo')):null};
 }
 function metaCellHtml(s){
   if(!s.meta) return '<span class="t-zero">—</span>';
+  if(s.sinAsisData) return `<span class="mono t-zero" title="Sin dato de asistencia para calcular avance">sin dato /${s.meta}</span>`;
   const title=`Ritmo necesario: ${s.metaRitmoNecesario?s.metaRitmoNecesario.toFixed(1):(s.meta/monthCutoffInfo().diasDelMes).toFixed(1)}/día · Déficit vs ritmo: ${s.metaDeficit!=null?(s.metaDeficit>=0?'+':'')+Math.round(s.metaDeficit):Math.round(s.metaLleva-s.meta)}`;
   return `<span class="smfdot ${s.metaStatus}" title="${title}"></span><span class="mono" title="${title}">${s.metaLleva}/${s.meta}</span>`;
 }
 function proyCellHtml(s){
   if(!s.meta) return '<span class="t-zero">—</span>';
+  if(s.sinAsisData) return '<span class="t-zero">sin dato</span>';
   const cls=s.proy>=s.meta?'t-good':(s.proy>=s.meta*.8?'t-warn':'t-bad');
   return `<span class="t-pct ${cls}">${nf.format(s.proy)}</span>`;
 }
@@ -1510,8 +1523,8 @@ function sedeRowHtml(s){
     <td class="num">${proyCellHtml(s)}</td>
     <td class="num">${pctCell(s.schedR,[.30,.20])}</td>
     <td class="num mono">${s.asis}</td>
-    <td class="num">${pctCell(s.efxLeads,[.20,.12])}</td>
-    <td class="num"><span class="minib"><i style="width:${(s.asisR*100).toFixed(0)}%"></i></span><span class="mono">${pct(s.asisR)}</span></td>
+    <td class="num">${s.sinAsisData?'<span class="t-zero">—</span>':pctCell(s.efxLeads,[.20,.12])}</td>
+    <td class="num">${s.sinAsisData?'<span class="t-zero">sin dato</span>':`<span class="minib"><i style="width:${(s.asisR*100).toFixed(0)}%"></i></span><span class="mono">${pct(s.asisR)}</span>`}</td>
   </tr>`;
 }
 function divRowHtml(label,color,d,count){
@@ -1520,12 +1533,12 @@ function divRowHtml(label,color,d,count){
     <td class="nm"><span class="ddot" style="background:${color}"></span>${label} <small>${count} sede${count!==1?'s':''}</small> ${smfPill(h.status)}</td>
     <td class="num mono">${d.leads}</td>
     <td class="num mono">${d.n}</td>
-    <td class="num">${d.meta?`<span class="smfdot ${d.metaStatus}"></span><span class="mono">${d.metaLleva}/${d.meta}</span>`:'<span class="t-zero">—</span>'}</td>
-    <td class="num">${d.meta?`<span class="t-pct ${d.proy>=d.meta?'t-good':(d.proy>=d.meta*.8?'t-warn':'t-bad')}">${nf.format(d.proy)}</span>`:'<span class="t-zero">—</span>'}</td>
+    <td class="num">${!d.meta?'<span class="t-zero">—</span>':(d.sinAsisData?`<span class="mono t-zero">sin dato /${d.meta}</span>`:`<span class="smfdot ${d.metaStatus}"></span><span class="mono">${d.metaLleva}/${d.meta}</span>`)}</td>
+    <td class="num">${!d.meta?'<span class="t-zero">—</span>':(d.sinAsisData?'<span class="t-zero">sin dato</span>':`<span class="t-pct ${d.proy>=d.meta?'t-good':(d.proy>=d.meta*.8?'t-warn':'t-bad')}">${nf.format(d.proy)}</span>`)}</td>
     <td class="num">${pctCell(d.schedR,[.30,.20])}</td>
     <td class="num mono">${d.asis}</td>
-    <td class="num">${pctCell(d.efxLeads,[.20,.12])}</td>
-    <td class="num">${pctCell(d.asisR,[.65,.5])}</td>
+    <td class="num">${d.sinAsisData?'<span class="t-zero">—</span>':pctCell(d.efxLeads,[.20,.12])}</td>
+    <td class="num">${d.sinAsisData?'<span class="t-zero">sin dato</span>':pctCell(d.asisR,[.65,.5])}</td>
   </tr>`;
 }
 function renderSede(base){
@@ -1546,10 +1559,10 @@ function renderSede(base){
   if(agg.length){ const g=divAgg(agg);
     html += `<tr class="trow"><td class="nm">TOTAL GENERAL</td>`+
       `<td class="num mono">${g.leads}</td><td class="num mono">${g.n}</td>`+
-      `<td class="num">${g.meta?`<span class="smfdot ${g.metaStatus}"></span><span class="mono">${g.metaLleva}/${g.meta}</span>`:'<span class="t-zero">—</span>'}</td>`+
-      `<td class="num">${g.meta?`<span class="t-pct ${g.proy>=g.meta?'t-good':(g.proy>=g.meta*.8?'t-warn':'t-bad')}">${nf.format(g.proy)}</span>`:'<span class="t-zero">—</span>'}</td>`+
+      `<td class="num">${!g.meta?'<span class="t-zero">—</span>':(g.sinAsisData?`<span class="mono t-zero">sin dato /${g.meta}</span>`:`<span class="smfdot ${g.metaStatus}"></span><span class="mono">${g.metaLleva}/${g.meta}</span>`)}</td>`+
+      `<td class="num">${!g.meta?'<span class="t-zero">—</span>':(g.sinAsisData?'<span class="t-zero">sin dato</span>':`<span class="t-pct ${g.proy>=g.meta?'t-good':(g.proy>=g.meta*.8?'t-warn':'t-bad')}">${nf.format(g.proy)}</span>`)}</td>`+
       `<td class="num">${pctCell(g.schedR,[.30,.20])}</td>`+
-      `<td class="num mono">${g.asis}</td><td class="num">${pctCell(g.efxLeads,[.20,.12])}</td><td class="num">${pctCell(g.asisR,[.65,.5])}</td></tr>`;
+      `<td class="num mono">${g.asis}</td><td class="num">${g.sinAsisData?'<span class="t-zero">—</span>':pctCell(g.efxLeads,[.20,.12])}</td><td class="num">${g.sinAsisData?'<span class="t-zero">sin dato</span>':pctCell(g.asisR,[.65,.5])}</td></tr>`;
   } else { html = `<tr><td colspan="9" class="empty" style="text-align:center;padding:22px">Sin datos para esta vista.</td></tr>`; }
   $('sedeTbody').innerHTML = html;
 
